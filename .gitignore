@@ -20,3 +20,10 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+# Nodes Modules
+./hemosafe-api/node_modules
+./hemosafe-web/node_modules
+
+node_modules/
+./hemosafe-api/node_modules/
+./hemosafe-web/node_modules/
