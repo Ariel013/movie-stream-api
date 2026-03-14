@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Grafana dashboard provisioning
+# Loads JSON dashboards from /var/lib/grafana/dashboards/
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: hemosafe
+    orgId: 1
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

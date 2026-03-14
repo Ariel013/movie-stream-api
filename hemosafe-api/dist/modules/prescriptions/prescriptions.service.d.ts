@@ -1,0 +1,135 @@
+import { JwtPayload } from '../../common/decorators/current-user.decorator';
+import { CreatePrescriptionDto } from './dto/create-prescription.dto';
+import { PrescriptionsRepository } from './repository/prescriptions.repository';
+export declare class PrescriptionsService {
+    private readonly prescriptionsRepository;
+    constructor(prescriptionsRepository: PrescriptionsRepository);
+    findAll(actor: JwtPayload): import(".prisma/client").Prisma.PrismaPromise<{
+        id: string;
+        createdAt: Date;
+        bloodTypeId: string;
+        expiresAt: Date | null;
+        hospitalId: string;
+        patientId: string;
+        physicianId: string;
+        quantity: number;
+        urgency: import(".prisma/client").$Enums.UrgencyLevel;
+        clinicalNotes: string | null;
+        isFulfilled: boolean;
+        fulfilledAt: Date | null;
+    }[]>;
+    findOne(id: string, actor: JwtPayload): Promise<{
+        bloodType: {
+            id: string;
+            aboGroup: import(".prisma/client").$Enums.AboGroup;
+            rhFactor: import(".prisma/client").$Enums.RhFactor;
+            label: string;
+            compatibleDonor: string[];
+        };
+        patient: {
+            id: string;
+            firstName: string;
+            lastName: string;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            nationalId: string | null;
+            dob: Date | null;
+            bloodTypeId: string | null;
+            hospitalId: string;
+            medicalRecordNo: string | null;
+        };
+        reservations: {
+            id: string;
+            createdAt: Date;
+            updatedAt: Date;
+            code: string;
+            bloodTypeId: string;
+            bloodBankId: string;
+            expiresAt: Date;
+            status: import(".prisma/client").$Enums.ReservationStatus;
+            notes: string | null;
+            hospitalId: string;
+            quantity: number;
+            urgency: import(".prisma/client").$Enums.UrgencyLevel;
+            prescriptionId: string | null;
+            requestedBy: string;
+            confirmedAt: Date | null;
+            dispatchedAt: Date | null;
+            deliveredAt: Date | null;
+            cancelledAt: Date | null;
+            cancelReason: string | null;
+        }[];
+        physician: {
+            email: string;
+            role: import(".prisma/client").$Enums.UserRole;
+            facilityId: string | null;
+            id: string;
+            passwordHash: string;
+            firstName: string;
+            lastName: string;
+            phone: string | null;
+            isActive: boolean;
+            mfaSecret: string | null;
+            refreshToken: string | null;
+            lastLoginAt: Date | null;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+    } & {
+        id: string;
+        createdAt: Date;
+        bloodTypeId: string;
+        expiresAt: Date | null;
+        hospitalId: string;
+        patientId: string;
+        physicianId: string;
+        quantity: number;
+        urgency: import(".prisma/client").$Enums.UrgencyLevel;
+        clinicalNotes: string | null;
+        isFulfilled: boolean;
+        fulfilledAt: Date | null;
+    }>;
+    create(dto: CreatePrescriptionDto, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__PrescriptionClient<{
+        id: string;
+        createdAt: Date;
+        bloodTypeId: string;
+        expiresAt: Date | null;
+        hospitalId: string;
+        patientId: string;
+        physicianId: string;
+        quantity: number;
+        urgency: import(".prisma/client").$Enums.UrgencyLevel;
+        clinicalNotes: string | null;
+        isFulfilled: boolean;
+        fulfilledAt: Date | null;
+    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    markFulfilled(id: string, actor: JwtPayload): Promise<{
+        id: string;
+        createdAt: Date;
+        bloodTypeId: string;
+        expiresAt: Date | null;
+        hospitalId: string;
+        patientId: string;
+        physicianId: string;
+        quantity: number;
+        urgency: import(".prisma/client").$Enums.UrgencyLevel;
+        clinicalNotes: string | null;
+        isFulfilled: boolean;
+        fulfilledAt: Date | null;
+    }>;
+    findUnfulfilled(actor: JwtPayload): import(".prisma/client").Prisma.PrismaPromise<{
+        id: string;
+        createdAt: Date;
+        bloodTypeId: string;
+        expiresAt: Date | null;
+        hospitalId: string;
+        patientId: string;
+        physicianId: string;
+        quantity: number;
+        urgency: import(".prisma/client").$Enums.UrgencyLevel;
+        clinicalNotes: string | null;
+        isFulfilled: boolean;
+        fulfilledAt: Date | null;
+    }[]>;
+}

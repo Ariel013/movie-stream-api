@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Promtail configuration
+# Collects logs from all Docker containers, adds service labels,
+# parses JSON log lines emitted by the NestJS API.
+# ─────────────────────────────────────────────────────────────────────────────
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+
+  # ── Docker containers via Docker socket ──────────────────────────────────────
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=hemosafe"]
+
+    relabel_configs:
+      # Use Docker Compose service name as job label
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+
+      # Container name
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.*)
+        target_label: container
+
+      # Environment label from container env HEMOSAFE_ENV
+      - source_labels: [__meta_docker_container_label_hemosafe_env]
+        target_label: env
+
+      # Keep only hemosafe_net containers (exclude monitoring-only containers)
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        regex: hemosafe.*
+        action: keep
+
+    pipeline_stages:
+
+      # ── Parse JSON logs (NestJS Winston JSON format) ────────────────────────
+      - match:
+          selector: '{service=~"api"}'
+          stages:
+            - json:
+                expressions:
+                  level:     level
+                  message:   message
+                  requestId: requestId
+                  userId:    userId
+                  method:    method
+                  url:       url
+                  statusCode: statusCode
+                  duration:  duration
+                  error:     error
+            - labels:
+                level:
+                statusCode:
+                method:
+            - template:
+                source: level
+                template: '{{ ToLower .Value }}'
+            - output:
+                source: message
+
+      # ── Parse Nginx JSON access logs ────────────────────────────────────────
+      - match:
+          selector: '{service="nginx"}'
+          stages:
+            - json:
+                expressions:
+                  status:         status
+                  request_method: request_method
+                  request_uri:    request_uri
+                  upstream_time:  upstream_response_time
+                  body_bytes:     body_bytes_sent
+            - labels:
+                status:
+                request_method:
+            - template:
+                # Tag slow requests (> 2s) for easy filtering
+                source:   upstream_time
+                template: '{{ if gt (atoi .Value) 2 }}slow{{ else }}normal{{ end }}'
+            - labels:
+                response_speed:
+
+      # ── Drop health-check log noise from all services ───────────────────────
+      - match:
+          selector: '{service=~".+"}'
+          stages:
+            - drop:
+                expression: '.*(GET /api/v1/health|GET /health|/stub_status).*'
+
+      # ── Add static labels ───────────────────────────────────────────────────
+      - static_labels:
+          project: hemosafe
+          environment: production

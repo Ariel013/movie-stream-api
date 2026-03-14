@@ -1,0 +1,123 @@
+import { JwtPayload } from '../../common/decorators/current-user.decorator';
+import { PrismaService } from '../../prisma/prisma.service';
+import { CreateDonorDto } from './dto/create-donor.dto';
+import { CreateScreeningDto } from './dto/create-screening.dto';
+import { DonorsRepository } from './repository/donors.repository';
+export declare class DonorsService {
+    private readonly donorsRepository;
+    private readonly prisma;
+    constructor(donorsRepository: DonorsRepository, prisma: PrismaService);
+    findAll(actor: JwtPayload): import(".prisma/client").Prisma.PrismaPromise<{
+        email: string | null;
+        id: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        nationalId: string;
+        dob: Date;
+        bloodTypeId: string;
+        isEligible: boolean;
+        ineligibilityReason: string | null;
+        lastDonationAt: Date | null;
+        donationCount: number;
+        registeredBankId: string | null;
+    }[]>;
+    findOne(id: string, actor: JwtPayload): Promise<{
+        bloodType: {
+            id: string;
+            aboGroup: import(".prisma/client").$Enums.AboGroup;
+            rhFactor: import(".prisma/client").$Enums.RhFactor;
+            label: string;
+            compatibleDonor: string[];
+        };
+        screenings: {
+            id: string;
+            donorId: string;
+            notes: string | null;
+            screenedBy: string | null;
+            screenedAt: Date;
+            hemoglobinGDl: import("@prisma/client/runtime/library").Decimal | null;
+            bloodPressure: string | null;
+            weightKg: import("@prisma/client/runtime/library").Decimal | null;
+            temperatureC: import("@prisma/client/runtime/library").Decimal | null;
+            isPassed: boolean;
+        }[];
+        registeredBank: {
+            name: string;
+            type: import(".prisma/client").$Enums.FacilityType;
+            email: string | null;
+            id: string;
+            phone: string | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            code: string;
+            address: string;
+            regionId: string;
+        } | null;
+    } & {
+        email: string | null;
+        id: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        nationalId: string;
+        dob: Date;
+        bloodTypeId: string;
+        isEligible: boolean;
+        ineligibilityReason: string | null;
+        lastDonationAt: Date | null;
+        donationCount: number;
+        registeredBankId: string | null;
+    }>;
+    create(dto: CreateDonorDto, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__DonorClient<{
+        email: string | null;
+        id: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        nationalId: string;
+        dob: Date;
+        bloodTypeId: string;
+        isEligible: boolean;
+        ineligibilityReason: string | null;
+        lastDonationAt: Date | null;
+        donationCount: number;
+        registeredBankId: string | null;
+    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    update(id: string, dto: Partial<CreateDonorDto>, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__DonorClient<{
+        email: string | null;
+        id: string;
+        firstName: string;
+        lastName: string;
+        phone: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        nationalId: string;
+        dob: Date;
+        bloodTypeId: string;
+        isEligible: boolean;
+        ineligibilityReason: string | null;
+        lastDonationAt: Date | null;
+        donationCount: number;
+        registeredBankId: string | null;
+    }, never, import("@prisma/client/runtime/library").DefaultArgs>;
+    createScreening(dto: CreateScreeningDto, actor: JwtPayload): Promise<{
+        id: string;
+        donorId: string;
+        notes: string | null;
+        screenedBy: string | null;
+        screenedAt: Date;
+        hemoglobinGDl: import("@prisma/client/runtime/library").Decimal | null;
+        bloodPressure: string | null;
+        weightKg: import("@prisma/client/runtime/library").Decimal | null;
+        temperatureC: import("@prisma/client/runtime/library").Decimal | null;
+        isPassed: boolean;
+    }>;
+}

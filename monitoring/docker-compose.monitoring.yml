@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Monitoring Stack
+# Prometheus + Grafana + Loki + Promtail + Alertmanager
+# Usage: docker compose -f docker-compose.monitoring.yml up -d
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: hemosafe-monitoring
+
+networks:
+  hemosafe_net:
+    external: true
+  monitoring:
+    driver: bridge
+
+services:
+
+  # ── Prometheus — metrics collection ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: hemosafe-prometheus
+    restart: always
+    networks: [monitoring, hemosafe_net]
+    ports:
+      - "127.0.0.1:9090:9090"      # only accessible locally (behind Nginx)
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --web.console.templates=/etc/prometheus/consoles
+
+  # ── Grafana — dashboards ───────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: hemosafe-grafana
+    restart: always
+    networks: [monitoring, hemosafe_net]
+    ports:
+      - "127.0.0.1:3100:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_AUTH_ANONYMOUS_ENABLED:  "false"
+      GF_SMTP_ENABLED:            "true"
+      GF_SMTP_HOST:               ${SMTP_HOST:-localhost:587}
+      GF_SMTP_USER:               ${SMTP_USER}
+      GF_SMTP_PASSWORD:           ${SMTP_PASSWORD}
+      GF_SMTP_FROM_ADDRESS:       monitoring@hemosafe.gov.dz
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  # ── Alertmanager — route alerts to Slack / Email ───────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: hemosafe-alertmanager
+    restart: always
+    networks: [monitoring]
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+
+  # ── Loki — log aggregation ────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: hemosafe-loki
+    restart: always
+    networks: [monitoring]
+    ports:
+      - "127.0.0.1:3010:3100"
+    volumes:
+      - ./monitoring/loki.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/config.yml
+
+  # ── Promtail — log shipper (collects from Docker containers) ──────────────
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: hemosafe-promtail
+    restart: always
+    networks: [monitoring]
+    volumes:
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+
+  # ── Node Exporter — host metrics (CPU, memory, disk) ──────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: hemosafe-node-exporter
+    restart: always
+    networks: [monitoring]
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - --path.procfs=/host/proc
+      - --path.rootfs=/rootfs
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+
+  # ── cAdvisor — Docker container metrics ────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.50.0
+    container_name: hemosafe-cadvisor
+    restart: always
+    networks: [monitoring]
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
+  # ── PostgreSQL Exporter ────────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: hemosafe-postgres-exporter
+    restart: always
+    networks: [monitoring, hemosafe_net]
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    volumes:
+      - ./monitoring/postgres-exporter-queries.yml:/etc/postgres-exporter/queries.yml:ro
+    command: --extend.query-path=/etc/postgres-exporter/queries.yml
+
+  # ── Redis Exporter ─────────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    container_name: hemosafe-redis-exporter
+    restart: always
+    networks: [monitoring, hemosafe_net]
+    environment:
+      REDIS_ADDR:     redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  loki_data:

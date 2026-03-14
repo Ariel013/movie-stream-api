@@ -1,0 +1,235 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Prometheus Alert Rules
+# ─────────────────────────────────────────────────────────────────────────────
+
+groups:
+
+  # ── API Availability ─────────────────────────────────────────────────────────
+  - name: api_availability
+    rules:
+
+      - alert: APIDown
+        expr: up{job="hemosafe-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "HEMOSAFE API is down"
+          description: "The API instance {{ $labels.instance }} has been unreachable for > 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="hemosafe-api", status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="hemosafe-api"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket{job="hemosafe-api"}[5m])) by (le, route)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "API p99 latency > 2s"
+          description: "Route {{ $labels.route }} p99 latency is {{ $value | humanizeDuration }}."
+
+      - alert: APIHighMemory
+        expr: |
+          process_resident_memory_bytes{job="hemosafe-api"} > 1.5 * 1024 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "API process memory > 1.5 GB"
+          description: "API instance {{ $labels.instance }} is using {{ $value | humanize1024 }}B RSS."
+
+  # ── Blood Stock Criticality ──────────────────────────────────────────────────
+  - name: blood_stock
+    rules:
+
+      - alert: CriticalBloodStockLevel
+        expr: hemosafe_blood_bags_available_total < 5
+        for: 0m
+        labels:
+          severity: critical
+          team: operations
+        annotations:
+          summary: "Critical blood stock: {{ $labels.blood_type }} at {{ $labels.facility }}"
+          description: "Only {{ $value }} units of {{ $labels.blood_type }} remaining at {{ $labels.facility }}. Immediate action required."
+
+      - alert: LowBloodStockLevel
+        expr: hemosafe_blood_bags_available_total < 20
+        for: 15m
+        labels:
+          severity: warning
+          team: operations
+        annotations:
+          summary: "Low blood stock: {{ $labels.blood_type }} at {{ $labels.facility }}"
+          description: "{{ $value }} units of {{ $labels.blood_type }} at {{ $labels.facility }}. Restocking recommended."
+
+      - alert: BloodBagsExpiringSoon
+        expr: hemosafe_blood_bags_expiring_within_48h_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: operations
+        annotations:
+          summary: "Blood bags expiring within 48h at {{ $labels.facility }}"
+          description: "{{ $value }} units of {{ $labels.blood_type }} will expire within 48 hours."
+
+  # ── Database ─────────────────────────────────────────────────────────────────
+  - name: database
+    rules:
+
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: dba
+        annotations:
+          summary: "PostgreSQL exporter is down"
+          description: "Cannot reach PostgreSQL at {{ $labels.instance }} for > 1 minute."
+
+      - alert: PostgreSQLHighConnections
+        expr: |
+          pg_stat_activity_count > pg_settings_max_connections * 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: dba
+        annotations:
+          summary: "PostgreSQL connection pool > 85%"
+          description: "{{ $value }} active connections (threshold: 85% of max_connections)."
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag > 30
+        for: 5m
+        labels:
+          severity: warning
+          team: dba
+        annotations:
+          summary: "PostgreSQL replica lag > 30s"
+          description: "Replication lag is {{ $value | humanizeDuration }} on {{ $labels.instance }}."
+
+      - alert: PostgreSQLLongRunningQuery
+        expr: |
+          pg_stat_activity_max_tx_duration{datname="hemosafe_prod"} > 300
+        for: 0m
+        labels:
+          severity: warning
+          team: dba
+        annotations:
+          summary: "Long-running PostgreSQL query (> 5 min)"
+          description: "A query has been running for {{ $value | humanizeDuration }} in hemosafe_prod."
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  - name: redis
+    rules:
+
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Redis is down"
+          description: "Cannot reach Redis at {{ $labels.instance }}."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.90
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Redis memory > 90%"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory."
+
+  # ── Host Infrastructure ───────────────────────────────────────────────────────
+  - name: host
+    rules:
+
+      - alert: HostDiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Disk space < 15% on {{ $labels.instance }}"
+          description: "{{ $value | humanizePercentage }} free on root filesystem."
+
+      - alert: HostDiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}) < 0.05
+        for: 1m
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Disk space CRITICAL (< 5%) on {{ $labels.instance }}"
+          description: "Only {{ $value | humanizePercentage }} free. Immediate action required."
+
+      - alert: HostHighCPU
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "CPU usage > 85% on {{ $labels.instance }}"
+          description: "Average CPU usage is {{ $value | humanize }}% over the last 10 minutes."
+
+      - alert: HostHighMemory
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+          / node_memory_MemTotal_bytes > 0.90
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Memory usage > 90% on {{ $labels.instance }}"
+          description: "{{ $value | humanizePercentage }} of RAM in use."
+
+  # ── Backup ────────────────────────────────────────────────────────────────────
+  - name: backup
+    rules:
+
+      - alert: BackupFailed
+        expr: hemosafe_backup_last_success_timestamp_seconds < (time() - 86400 * 1.5)
+        for: 0m
+        labels:
+          severity: critical
+          team: dba
+        annotations:
+          summary: "Database backup has not succeeded in > 36 hours"
+          description: "Last successful backup was {{ $value | humanizeTimestamp }}. Check scripts/backup.sh."
+
+      - alert: BackupMissing
+        expr: absent(hemosafe_backup_last_success_timestamp_seconds)
+        for: 1h
+        labels:
+          severity: warning
+          team: dba
+        annotations:
+          summary: "Backup metric missing — backup pushgateway may be down"
+          description: "hemosafe_backup_last_success_timestamp_seconds has not been reported."

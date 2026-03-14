@@ -1,0 +1,161 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Continuous Deployment
+# Triggers: CI passes on main (staging) or manual dispatch (production)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    branches:  [main]
+    types:     [completed]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [staging, production]
+        default: staging
+      image_tag:
+        description: "Docker image tag to deploy"
+        required: false
+        default: latest
+
+jobs:
+
+  # ── Deploy to Staging ──────────────────────────────────────────────────────
+  deploy-staging:
+    name: "Deploy → Staging"
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.hemosafe.gov.dz
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging server via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          port:     ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd /opt/hemosafe
+
+            # Pull latest images
+            IMAGE_TAG=${{ github.sha }}
+            REGISTRY=ghcr.io/${{ github.repository }}
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker pull ${REGISTRY}/hemosafe-api:${IMAGE_TAG}
+            docker pull ${REGISTRY}/hemosafe-web:${IMAGE_TAG}
+
+            # Rolling update (zero-downtime)
+            IMAGE_TAG=${IMAGE_TAG} REGISTRY=${REGISTRY} \
+              docker compose -f docker-compose.prod.yml up -d \
+              --no-build \
+              --remove-orphans \
+              api web
+
+            # Wait for health checks
+            sleep 15
+            docker compose -f docker-compose.prod.yml ps | grep -E "(api|web)"
+
+            # Remove old images
+            docker image prune -f
+
+      - name: Run smoke tests
+        run: |
+          sleep 10
+          curl -sf https://staging.hemosafe.gov.dz/api/v1/health | grep '"status":"ok"'
+
+      - name: Notify on Slack (staging)
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Staging deploy ${{ job.status == 'success' && '✅' || '❌' }} — ${{ github.sha }} — ${{ job.status }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ── Deploy to Production ───────────────────────────────────────────────────
+  deploy-production:
+    name: "Deploy → Production"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://hemosafe.gov.dz
+    # Requires manual approval configured in GitHub Environment settings
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to production (blue-green)
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/hemosafe
+
+            IMAGE_TAG=${{ inputs.image_tag || github.sha }}
+            REGISTRY=ghcr.io/${{ github.repository }}
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            docker pull ${REGISTRY}/hemosafe-api:${IMAGE_TAG}
+            docker pull ${REGISTRY}/hemosafe-web:${IMAGE_TAG}
+
+            # Run DB migrations first (idempotent)
+            docker run --rm \
+              --env-file .env.prod \
+              --network hemosafe_net \
+              ${REGISTRY}/hemosafe-api:${IMAGE_TAG} \
+              sh -c "npx prisma migrate deploy"
+
+            # Rolling update — one replica at a time
+            IMAGE_TAG=${IMAGE_TAG} REGISTRY=${REGISTRY} \
+              docker compose -f docker-compose.prod.yml up -d \
+              --no-build \
+              --scale api=3 \
+              --scale web=2 \
+              api web
+
+            sleep 30
+            docker compose -f docker-compose.prod.yml ps
+            docker image prune -f
+
+      - name: Production smoke test
+        run: |
+          curl -sf https://hemosafe.gov.dz/api/v1/health | grep '"status":"ok"'
+
+      - name: Tag release in Git
+        run: |
+          git tag "release-$(date +%Y%m%d-%H%M%S)-${{ github.sha }}"
+          git push origin --tags
+
+      - name: Notify team on deployment
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Production deploy ${{ job.status == 'success' && '✅' || '🚨' }} — ${{ inputs.image_tag || github.sha }} — ${{ job.status }}\nApproved by: ${{ github.actor }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

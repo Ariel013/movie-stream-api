@@ -1,0 +1,143 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — PostgreSQL Exporter Custom Queries
+# Exposes blood-bank domain metrics from the hemosafe_prod database
+# ─────────────────────────────────────────────────────────────────────────────
+
+hemosafe_blood_bags_available:
+  query: |
+    SELECT
+      bt.name                        AS blood_type,
+      f.name                         AS facility,
+      f.id::text                     AS facility_id,
+      COUNT(*)                       AS count
+    FROM "BloodBag" bb
+    JOIN "BloodType" bt ON bt.id = bb."bloodTypeId"
+    JOIN "Facility"  f  ON f.id  = bb."facilityId"
+    WHERE bb.status = 'AVAILABLE'
+      AND bb."expiresAt" > NOW()
+    GROUP BY bt.name, f.name, f.id
+  metrics:
+    - blood_type:
+        usage: LABEL
+        description: ABO/Rh blood group
+    - facility:
+        usage: LABEL
+        description: Facility name
+    - facility_id:
+        usage: LABEL
+        description: Facility UUID
+    - count:
+        usage: GAUGE
+        description: Number of available non-expired blood bags
+
+hemosafe_blood_bags_expiring_soon:
+  query: |
+    SELECT
+      bt.name AS blood_type,
+      f.name  AS facility,
+      COUNT(*) FILTER (WHERE bb."expiresAt" BETWEEN NOW() AND NOW() + INTERVAL '48 hours') AS within_48h,
+      COUNT(*) FILTER (WHERE bb."expiresAt" BETWEEN NOW() AND NOW() + INTERVAL '7 days')  AS within_7d
+    FROM "BloodBag" bb
+    JOIN "BloodType" bt ON bt.id = bb."bloodTypeId"
+    JOIN "Facility"  f  ON f.id  = bb."facilityId"
+    WHERE bb.status = 'AVAILABLE'
+    GROUP BY bt.name, f.name
+  metrics:
+    - blood_type:
+        usage: LABEL
+        description: ABO/Rh blood group
+    - facility:
+        usage: LABEL
+        description: Facility name
+    - within_48h:
+        usage: GAUGE
+        description: Blood bags expiring within 48 hours
+    - within_7d:
+        usage: GAUGE
+        description: Blood bags expiring within 7 days
+
+hemosafe_reservations_by_status:
+  query: |
+    SELECT
+      status,
+      COUNT(*) AS count,
+      AVG(EXTRACT(EPOCH FROM (NOW() - "createdAt"))) AS avg_age_seconds
+    FROM "Reservation"
+    WHERE "createdAt" > NOW() - INTERVAL '24 hours'
+    GROUP BY status
+  metrics:
+    - status:
+        usage: LABEL
+        description: Reservation FSM status
+    - count:
+        usage: GAUGE
+        description: Number of reservations in this status (last 24h)
+    - avg_age_seconds:
+        usage: GAUGE
+        description: Average age of reservations in this status (seconds)
+
+hemosafe_reservations_pending_long:
+  query: |
+    SELECT COUNT(*) AS count
+    FROM "Reservation"
+    WHERE status = 'PENDING'
+      AND "createdAt" < NOW() - INTERVAL '2 hours'
+  metrics:
+    - count:
+        usage: GAUGE
+        description: Reservations stuck in PENDING for > 2 hours (SLA breach indicator)
+
+hemosafe_donations_today:
+  query: |
+    SELECT
+      f.name  AS facility,
+      COUNT(*) AS count
+    FROM "Donation" d
+    JOIN "Facility" f ON f.id = d."facilityId"
+    WHERE d."donatedAt" >= CURRENT_DATE
+    GROUP BY f.name
+  metrics:
+    - facility:
+        usage: LABEL
+        description: Facility name
+    - count:
+        usage: GAUGE
+        description: Number of donations collected today
+
+hemosafe_donors_registered:
+  query: |
+    SELECT COUNT(*) AS total FROM "Donor"
+  metrics:
+    - total:
+        usage: GAUGE
+        description: Total registered donors
+
+hemosafe_active_facilities:
+  query: |
+    SELECT
+      type,
+      COUNT(*) FILTER (WHERE active = true)  AS active,
+      COUNT(*) FILTER (WHERE active = false) AS inactive
+    FROM "Facility"
+    GROUP BY type
+  metrics:
+    - type:
+        usage: LABEL
+        description: Facility type (BLOOD_BANK | HOSPITAL | CLINIC)
+    - active:
+        usage: GAUGE
+        description: Number of active facilities of this type
+    - inactive:
+        usage: GAUGE
+        description: Number of inactive facilities of this type
+
+hemosafe_backup_last_success:
+  # Updated by backup.sh via a dedicated backup_log table
+  query: |
+    SELECT EXTRACT(EPOCH FROM MAX(completed_at)) AS timestamp_seconds
+    FROM "BackupLog"
+    WHERE status = 'SUCCESS'
+  metrics:
+    - timestamp_seconds:
+        usage: GAUGE
+        description: Unix timestamp of the last successful backup (used by BackupFailed alert)

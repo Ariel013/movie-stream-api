@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — fail2ban jail configuration
+# Install to: /etc/fail2ban/jail.local
+# Restart:    systemctl restart fail2ban
+# ─────────────────────────────────────────────────────────────────────────────
+
+[DEFAULT]
+# Ban for 1 hour on first offence
+bantime  = 3600
+# Count failures within 10 minutes
+findtime = 600
+# Max attempts before ban
+maxretry = 5
+# Email notification (requires sendmail)
+destemail = security@hemosafe.gov.dz
+sendername = Fail2Ban-Hemosafe
+action = %(action_mwl)s
+
+# ── SSH ───────────────────────────────────────────────────────────────────────
+[sshd]
+enabled  = true
+port     = ssh
+logpath  = %(sshd_log)s
+maxretry = 3
+bantime  = 86400  # 24h for SSH brute force
+
+# ── Nginx — authentication endpoint ──────────────────────────────────────────
+[nginx-auth]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/hemosafe_access.log
+filter   = nginx-auth
+maxretry = 10
+findtime = 300   # 5 minutes
+bantime  = 3600  # 1 hour
+
+# ── Nginx — general 4xx flood (scanner / probe protection) ───────────────────
+[nginx-4xx]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/hemosafe_access.log
+filter   = nginx-4xx
+maxretry = 30
+findtime = 60
+bantime  = 600
+
+# ── Nginx — request rate abuse (HTTP 429) ────────────────────────────────────
+[nginx-429]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/hemosafe_access.log
+filter   = nginx-429
+maxretry = 5
+findtime = 60
+bantime  = 1800

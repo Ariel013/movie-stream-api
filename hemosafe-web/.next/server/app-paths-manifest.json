@@ -1,0 +1,17 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/page": "app/page.js",
+  "/(auth)/auth/login/page": "app/(auth)/auth/login/page.js",
+  "/(dashboard)/dashboard/blood-search/page": "app/(dashboard)/dashboard/blood-search/page.js",
+  "/(dashboard)/dashboard/directory/page": "app/(dashboard)/dashboard/directory/page.js",
+  "/(dashboard)/dashboard/donors/page": "app/(dashboard)/dashboard/donors/page.js",
+  "/(dashboard)/dashboard/logs/page": "app/(dashboard)/dashboard/logs/page.js",
+  "/(dashboard)/dashboard/map/page": "app/(dashboard)/dashboard/map/page.js",
+  "/(dashboard)/dashboard/notifications/page": "app/(dashboard)/dashboard/notifications/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/dashboard/patients/page": "app/(dashboard)/dashboard/patients/page.js",
+  "/(dashboard)/dashboard/reservations/page": "app/(dashboard)/dashboard/reservations/page.js",
+  "/(dashboard)/dashboard/settings/page": "app/(dashboard)/dashboard/settings/page.js",
+  "/(dashboard)/dashboard/statistics/page": "app/(dashboard)/dashboard/statistics/page.js",
+  "/(dashboard)/dashboard/stock/page": "app/(dashboard)/dashboard/stock/page.js"
+}

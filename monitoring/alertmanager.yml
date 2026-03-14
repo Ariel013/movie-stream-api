@@ -1,0 +1,129 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HEMOSAFE — Alertmanager configuration
+# Routes: critical → Slack #alerts-critical + email
+#         warning  → Slack #alerts-warning
+#         dba      → email dba team
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost:   ${SMTP_HOST:-localhost:587}
+  smtp_from:        alerting@hemosafe.gov.dz
+  smtp_auth_username: ${SMTP_USER}
+  smtp_auth_password: ${SMTP_PASSWORD}
+  smtp_require_tls: true
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+# ── Inhibition rules ──────────────────────────────────────────────────────────
+# Suppress warning-level alerts when a critical alert for the same target fires
+inhibit_rules:
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [instance, job]
+
+# ── Root route ────────────────────────────────────────────────────────────────
+route:
+  receiver: default-slack
+  group_by: [alertname, severity, instance]
+  group_wait:      30s
+  group_interval:  5m
+  repeat_interval: 4h
+
+  routes:
+
+    # Critical alerts — immediate Slack + email
+    - matchers: [severity="critical"]
+      receiver: critical
+      group_wait:      10s
+      repeat_interval: 1h
+      continue: false
+
+    # DBA-specific alerts
+    - matchers: [team="dba"]
+      receiver: dba-email
+      repeat_interval: 2h
+
+    # Operations (blood stock) alerts
+    - matchers: [team="operations"]
+      receiver: operations-slack
+      group_wait: 0s
+      repeat_interval: 30m
+
+# ── Receivers ─────────────────────────────────────────────────────────────────
+receivers:
+
+  - name: default-slack
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL}
+        channel: "#hemosafe-alerts"
+        username: "Hemosafe Alertmanager"
+        icon_emoji: ":warning:"
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }} — {{ .Labels.severity }}
+          *Description:* {{ .Annotations.description }}
+          *Since:* {{ .StartsAt | since }}
+          {{ end }}
+        send_resolved: true
+
+  - name: critical
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_CRITICAL_URL}
+        channel: "#hemosafe-critical"
+        username: "Hemosafe CRITICAL"
+        icon_emoji: ":rotating_light:"
+        title: ':rotating_light: CRITICAL: {{ .CommonLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Detail:* {{ .Annotations.description }}
+          *Labels:* {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          {{ end }}
+        send_resolved: true
+    email_configs:
+      - to: astreinte@hemosafe.gov.dz, dsi@hemosafe.gov.dz
+        subject: '[CRITICAL] {{ .CommonLabels.alertname }}'
+        html: |
+          <h2 style="color:red">CRITICAL Alert</h2>
+          {{ range .Alerts }}
+          <p><strong>{{ .Annotations.summary }}</strong></p>
+          <p>{{ .Annotations.description }}</p>
+          <table>
+            {{ range .Labels.SortedPairs }}
+            <tr><td>{{ .Name }}</td><td>{{ .Value }}</td></tr>
+            {{ end }}
+          </table>
+          <p>Started: {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}</p>
+          {{ end }}
+        send_resolved: true
+
+  - name: dba-email
+    email_configs:
+      - to: dba@hemosafe.gov.dz
+        subject: '[HEMOSAFE-DB] {{ .CommonLabels.alertname }}'
+        html: |
+          <h3>Database Alert</h3>
+          {{ range .Alerts }}
+          <p><strong>{{ .Annotations.summary }}</strong></p>
+          <p>{{ .Annotations.description }}</p>
+          {{ end }}
+        send_resolved: true
+
+  - name: operations-slack
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_OPS_URL}
+        channel: "#hemosafe-operations"
+        username: "Hemosafe Stock Monitor"
+        icon_emoji: ":drop_of_blood:"
+        title: ':drop_of_blood: Stock Alert: {{ .CommonLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true

@@ -1,0 +1,16 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PgBouncer userlist.txt
+# Format: "username" "scram-sha-256$<iterations>:<salt>$<clientkey>:<serverkey>"
+#
+# Generate with:
+#   echo "SELECT concat('\"', usename, '\" \"', passwd, '\"') FROM pg_shadow WHERE usename = 'hemosafe_app';" \
+#     | psql -U postgres hemosafe_prod
+#
+# Replace the placeholder below with the actual hash from PostgreSQL.
+# DO NOT commit real passwords — this file should be generated at deploy time.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Placeholder — replaced by deploy script reading from .env.prod
+"hemosafe_app"    "REPLACE_WITH_SCRAM_HASH_FROM_POSTGRES"
+"hemosafe_ro"     "REPLACE_WITH_SCRAM_HASH_FROM_POSTGRES"
+"pgbouncer"       "REPLACE_WITH_SCRAM_HASH_FROM_POSTGRES"
