@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { RedisModule } from '@nestjs-modules/ioredis';
 import { validate } from './config/config.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -19,6 +20,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { StatisticsModule } from './modules/statistics/statistics.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 
 @Module({
   imports: [
@@ -45,6 +47,15 @@ import { HealthModule } from './modules/health/health.module';
     // ── Event emitter (cross-module notifications) ───────────────────────────
     EventEmitterModule.forRoot(),
 
+    // ── Redis ────────────────────────────────────────────────────────────────
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService) => ({
+        type: 'single',
+        url: cfg.get<string>('REDIS_URL', 'redis://localhost:6379'),
+      }),
+    }),
+
     // ── Prisma ──────────────────────────────────────────────────────────────
     PrismaModule,
 
@@ -63,6 +74,7 @@ import { HealthModule } from './modules/health/health.module';
     StatisticsModule,
     SyncModule,
     HealthModule,
+    AuditLogsModule,
   ],
 })
 export class AppModule {}

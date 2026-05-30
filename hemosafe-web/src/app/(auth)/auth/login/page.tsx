@@ -42,176 +42,190 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel – brand illustration */}
-      <div className="hidden lg:flex w-1/2 gradient-primary flex-col justify-between p-12 relative overflow-hidden">
-        {/* Background decorative icon */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-          <span className="material-symbols-outlined text-white" style={{ fontSize: '600px' }}>
-            bloodtype
-          </span>
-        </div>
+    <div className="bg-surface min-h-screen flex flex-col">
+      <main className="flex-grow flex flex-col md:flex-row">
 
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <span className="material-symbols-outlined filled text-white text-[20px]">bloodtype</span>
-            </div>
-            <div>
-              <h1 className="text-white font-bold text-lg font-headline leading-none">HEMOSAFE</h1>
-              <p className="text-white/70 text-xs">National Blood Bank Management</p>
-            </div>
-          </div>
+        {/* Left – brand illustration */}
+        <section className="hidden md:flex md:w-1/2 lg:w-3/5 bg-surface-container-low items-center justify-center p-12 relative overflow-hidden">
+          {/* Decorative blobs */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -mr-32 -mt-32 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary-container/20 rounded-full -ml-48 -mb-48 pointer-events-none" />
 
-          <div className="max-w-sm">
-            <h2 className="text-white font-extrabold text-4xl font-headline leading-tight mb-4">
-              National<br />Blood Network
-            </h2>
-            <p className="text-white/80 text-base leading-relaxed">
-              A unified platform connecting hospitals and blood banks across the nation to ensure life-saving blood is always available when needed.
-            </p>
-          </div>
-        </div>
-
-        {/* Stats card */}
-        <div className="relative z-10 bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/20">
-          <div className="grid grid-cols-3 gap-6">
-            {[
-              { value: '142', label: 'Hospitals' },
-              { value: '38', label: 'Blood Banks' },
-              { value: '4.8K', label: 'Bags Available' },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="text-white font-extrabold text-2xl font-headline">{stat.value}</p>
-                <p className="text-white/70 text-xs mt-1">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel – login form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-surface">
-        <div className="w-full max-w-md space-y-8">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
-              <span className="material-symbols-outlined filled text-white text-[20px]">bloodtype</span>
-            </div>
-            <h1 className="font-bold text-lg font-headline">HEMOSAFE</h1>
-          </div>
-
-          {/* Header */}
-          <div>
-            <h2 className="text-3xl font-extrabold text-on-surface font-headline">Welcome back</h2>
-            <p className="text-on-surface-variant mt-2 text-sm">Sign in to the National Blood Bank Portal</p>
-          </div>
-
-          {/* Warning banner */}
-          <div className="flex items-center gap-3 p-4 bg-error-container rounded-xl border-l-4 border-primary">
-            <span className="material-symbols-outlined text-primary text-[20px]">security</span>
-            <div>
-              <p className="text-xs font-bold text-on-surface uppercase tracking-wide">Official Personnel Only</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Unauthorized access is strictly prohibited and monitored.</p>
-            </div>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-bold text-on-surface uppercase tracking-wider mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">
-                  mail
+          <div className="z-10 w-full max-w-2xl">
+            {/* Card */}
+            <div className="bg-surface-container-lowest p-8 xl:p-12 rounded-xl shadow-sm border border-outline-variant/15">
+              <div className="mb-8">
+                <span className="text-[10px] font-bold tracking-wider uppercase bg-primary/10 text-primary px-3 py-1 rounded-full">
+                  Clinical Standards
                 </span>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  {...register('email')}
-                  placeholder="user@hemosafe.gov"
-                  className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
-                />
               </div>
-              {errors.email && (
-                <p className="mt-1.5 text-xs text-error">{errors.email.message}</p>
-              )}
+              <h2 className="text-4xl lg:text-5xl font-extrabold text-on-surface font-headline mb-6 leading-tight">
+                Securing the <span className="text-primary">Clinical Pulse</span> of our nation.
+              </h2>
+              <p className="text-secondary text-lg mb-10 leading-relaxed max-w-lg">
+                Access the National Blood Bank Management System with enterprise-grade security protocols. Real-time stock tracking and donor connectivity at your fingertips.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-4 p-4 bg-surface rounded-lg">
+                  <div className="w-12 h-12 rounded-lg bg-primary-fixed flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-primary">shield_lock</span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-secondary font-medium">Data Integrity</p>
+                    <p className="text-sm font-bold text-on-surface">ISO 27001 Certified</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 p-4 bg-surface rounded-lg">
+                  <div className="w-12 h-12 rounded-lg bg-secondary-container flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-secondary">sync</span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-secondary font-medium">Sync Status</p>
+                    <p className="text-sm font-bold text-on-surface">Real-time Node</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-bold text-on-surface uppercase tracking-wider mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">
-                  lock
-                </span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  {...register('password')}
-                  placeholder="••••••••••"
-                  className="w-full pl-12 pr-12 py-3.5 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[20px]">
+            {/* Image */}
+            <div className="mt-12 flex justify-center">
+              <img
+                alt="Professional medical laboratory setting"
+                className="w-full h-64 object-cover rounded-xl shadow-lg grayscale hover:grayscale-0 transition-all duration-500"
+                src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&q=80"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Right – login form */}
+        <section className="flex-grow md:w-1/2 lg:w-2/5 flex items-center justify-center p-6 md:p-12 bg-surface-container-lowest">
+          <div className="w-full max-w-md">
+
+            {/* Brand header */}
+            <div className="flex flex-col items-center mb-12">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 gradient-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+                  <span className="material-symbols-outlined filled text-white text-3xl">bloodtype</span>
+                </div>
+                <h1 className="text-2xl font-extrabold text-on-surface tracking-tight font-headline">BloodConnect</h1>
+              </div>
+              <div className="text-center">
+                <h2 className="text-xl font-bold text-on-surface font-headline mb-1">National Blood Bank</h2>
+                <p className="text-sm text-secondary">Management System Portal</p>
+              </div>
+            </div>
+
+            {/* Warning banner */}
+            <div className="mb-8 p-4 rounded-lg bg-surface-container-low border-l-4 border-primary/40 flex items-start gap-4">
+              <span className="material-symbols-outlined text-primary mt-0.5">info</span>
+              <div>
+                <p className="text-sm font-bold text-on-surface">Official Personnel Only</p>
+                <p className="text-xs text-secondary leading-normal">
+                  Unauthorized access attempt is monitored and reported to the National Healthcare Security Agency.
+                </p>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2" htmlFor="email">
+                  Institutional Email
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-xl">mail</span>
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    {...register('email')}
+                    placeholder="name@healthcare.gov"
+                    className="w-full pl-12 pr-4 py-3.5 bg-surface border-none rounded-xl text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                  />
+                </div>
+                {errors.email && <p className="mt-1.5 text-xs text-error">{errors.email.message}</p>}
+              </div>
+
+              {/* Password */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest" htmlFor="password">
+                    Security Password
+                  </label>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-xl">lock</span>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    {...register('password')}
+                    placeholder="••••••••"
+                    className="w-full pl-12 pr-12 py-3.5 bg-surface border-none rounded-xl text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-secondary text-xl"
+                  >
                     {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
+                  </button>
+                </div>
+                {errors.password && <p className="mt-1.5 text-xs text-error">{errors.password.message}</p>}
               </div>
-              {errors.password && (
-                <p className="mt-1.5 text-xs text-error">{errors.password.message}</p>
+
+              {/* Server error */}
+              {serverError && (
+                <div className="flex items-center gap-2 p-3 bg-error-container rounded-lg">
+                  <span className="material-symbols-outlined text-error text-[18px]">error</span>
+                  <p className="text-xs text-on-error-container font-medium">{serverError}</p>
+                </div>
               )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full gradient-primary text-white py-4 rounded-xl font-bold text-sm tracking-wide shadow-lg shadow-primary/20 hover:opacity-95 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-lg">refresh</span>
+                    Authenticating...
+                  </>
+                ) : (
+                  <>
+                    <span>Authenticate Session</span>
+                    <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Security footer */}
+            <div className="mt-12 flex items-center justify-center gap-2 py-4 border-t border-outline-variant/10">
+              <span className="material-symbols-outlined text-secondary text-lg">verified_user</span>
+              <span className="text-xs font-medium text-secondary">One device session only</span>
+              <span className="w-1 h-1 rounded-full bg-outline-variant" />
+              <span className="text-xs font-medium text-secondary uppercase tracking-tighter">TLS 1.3 Encryption</span>
             </div>
+          </div>
+        </section>
+      </main>
 
-            {/* Server error */}
-            {serverError && (
-              <div className="flex items-center gap-2 p-3 bg-error-container rounded-lg">
-                <span className="material-symbols-outlined text-error text-[18px]">error</span>
-                <p className="text-xs text-on-error-container font-medium">{serverError}</p>
-              </div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full gradient-primary text-white font-bold py-3.5 rounded-xl hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="material-symbols-outlined animate-spin text-[18px]">refresh</span>
-                  Authenticating...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[18px]">login</span>
-                  Authenticate Session
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Footer info */}
-          <div className="flex items-center justify-between text-[11px] text-on-surface-variant pt-4 border-t border-outline-variant/20">
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px]">devices</span>
-              One device session only
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px]">lock</span>
-              TLS 1.3 Encryption
-            </span>
+      {/* Footer */}
+      <footer className="bg-surface-container-low px-8 py-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-sm text-secondary font-medium">© 2024 National Healthcare System</div>
+          <div className="flex items-center gap-8">
+            <a className="text-xs font-bold text-on-surface-variant uppercase tracking-widest hover:text-primary transition-colors" href="#">Privacy Policy</a>
+            <a className="text-xs font-bold text-on-surface-variant uppercase tracking-widest hover:text-primary transition-colors" href="#">Legal</a>
+            <a className="text-xs font-bold text-on-surface-variant uppercase tracking-widest hover:text-primary transition-colors" href="#">Security</a>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

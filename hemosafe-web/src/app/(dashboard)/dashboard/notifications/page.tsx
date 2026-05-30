@@ -1,70 +1,84 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from '@/shared/components/TopBar';
+import api from '@/shared/lib/api';
 
-type NotifType = 'reservation' | 'alert' | 'system' | 'transfer';
+type NotifType =
+  | 'LOW_STOCK'
+  | 'RESERVATION_CONFIRMED'
+  | 'RESERVATION_EXPIRED'
+  | 'BAG_EXPIRING_SOON'
+  | 'TRANSFER_RECEIVED'
+  | 'PRESCRIPTION_FILLED'
+  | 'SYSTEM';
 
 interface Notification {
   id: string;
   type: NotifType;
   title: string;
-  description: string;
-  time: string;
-  read: boolean;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
-const MOCK_NOTIFS: Notification[] = [
-  { id: '1', type: 'reservation', title: 'Reservation Confirmed', description: 'RES-0041 (O+ × 4 bags) has been confirmed by City Central Blood Bank.', time: '2 min ago', read: false },
-  { id: '2', type: 'alert', title: 'Critical Stock Alert', description: 'AB- blood type is critically low at North Regional Blood Bank (< 5 bags remaining).', time: '8 min ago', read: false },
-  { id: '3', type: 'transfer', title: 'Transfer Dispatched', description: 'Transfer #T-0047 is now en route to St. Mary General Hospital.', time: '15 min ago', read: false },
-  { id: '4', type: 'reservation', title: 'Reservation Expired', description: 'RES-0033 (O- × 1 bag) has expired without pickup and bags have been released.', time: '1 hr ago', read: true },
-  { id: '5', type: 'alert', title: 'Expiry Warning', description: '8 blood bags at City Central Blood Bank will expire within 48 hours.', time: '2 hr ago', read: true },
-  { id: '6', type: 'system', title: 'System Maintenance', description: 'Scheduled database synchronization completed successfully.', time: '3 hr ago', read: true },
-  { id: '7', type: 'reservation', title: 'New Reservation Request', description: 'Riverside Clinic has requested AB- × 2 bags. Awaiting your confirmation.', time: '4 hr ago', read: true },
-  { id: '8', type: 'alert', title: 'Donor Screening Complete', description: 'Batch #203 of 12 donor screenings has been completed. 10 eligible.', time: '5 hr ago', read: true },
-  { id: '9', type: 'system', title: 'New Hospital Registered', description: 'Riverside Medical Center (Oran) has been registered and is now active.', time: '6 hr ago', read: true },
-  { id: '10', type: 'transfer', title: 'Transfer Delivered', description: 'Transfer #T-0045 (A+ × 6 bags) was confirmed received by City Hospital.', time: '8 hr ago', read: true },
-];
-
-const ICONS: Record<NotifType, string> = {
-  reservation: 'event_upcoming',
-  alert: 'warning',
-  system: 'info',
-  transfer: 'local_shipping',
+const ICONS: Record<string, string> = {
+  LOW_STOCK:             'warning',
+  RESERVATION_CONFIRMED: 'event_upcoming',
+  RESERVATION_EXPIRED:   'event_busy',
+  BAG_EXPIRING_SOON:     'hourglass_bottom',
+  TRANSFER_RECEIVED:     'local_shipping',
+  PRESCRIPTION_FILLED:   'medication',
+  SYSTEM:                'info',
 };
 
-const ICON_BG: Record<NotifType, string> = {
-  reservation: 'bg-secondary-container text-secondary',
-  alert: 'bg-error-container text-primary',
-  system: 'bg-surface-container text-on-surface-variant',
-  transfer: 'bg-tertiary-fixed/40 text-tertiary',
+const ICON_BG: Record<string, string> = {
+  LOW_STOCK:             'bg-error-container text-primary',
+  RESERVATION_CONFIRMED: 'bg-tertiary-fixed/40 text-tertiary',
+  RESERVATION_EXPIRED:   'bg-surface-container text-on-surface-variant',
+  BAG_EXPIRING_SOON:     'bg-amber-100 text-amber-700',
+  TRANSFER_RECEIVED:     'bg-secondary-container text-secondary',
+  PRESCRIPTION_FILLED:   'bg-secondary-container text-secondary',
+  SYSTEM:                'bg-surface-container text-on-surface-variant',
 };
 
-type FilterTab = 'all' | 'unread' | NotifType;
+function timeAgo(date: string) {
+  const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
+  if (mins < 1)    return 'à l\'instant';
+  if (mins < 60)   return `il y a ${mins} min`;
+  if (mins < 1440) return `il y a ${Math.floor(mins / 60)} h`;
+  return `il y a ${Math.floor(mins / 1440)} j`;
+}
+
+type FilterTab = 'all' | 'unread';
 
 export default function NotificationsPage() {
-  const [tab, setTab] = useState<FilterTab>('all');
-  const [notifs, setNotifs] = useState<Notification[]>(MOCK_NOTIFS);
+  const [notifs, setNotifs]   = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab]         = useState<FilterTab>('all');
 
-  const unreadCount = notifs.filter((n) => !n.read).length;
+  const fetchNotifs = () => {
+    api.get('/notifications', { params: { limit: 50 } })
+      .then((res) => setNotifs(res.data.data?.data ?? []))
+      .finally(() => setLoading(false));
+  };
 
-  const markAllRead = () => setNotifs((prev) => prev.map((n) => ({ ...n, read: true })));
-  const markRead = (id: string) => setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+  useEffect(() => { fetchNotifs(); }, []);
 
-  const filtered = notifs.filter((n) => {
-    if (tab === 'unread') return !n.read;
-    if (tab !== 'all') return n.type === tab;
-    return true;
-  });
+  const unreadCount = notifs.filter((n) => !n.isRead).length;
 
-  const TABS: { key: FilterTab; label: string; count?: number }[] = [
-    { key: 'all', label: 'All', count: notifs.length },
-    { key: 'unread', label: 'Unread', count: unreadCount },
-    { key: 'reservation', label: 'Reservations' },
-    { key: 'alert', label: 'Alerts' },
-    { key: 'system', label: 'System' },
-  ];
+  const markAllRead = async () => {
+    await api.patch('/notifications/read-all');
+    setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  };
+
+  const markRead = async (id: string) => {
+    if (notifs.find((n) => n.id === id)?.isRead) return;
+    await api.patch(`/notifications/${id}/read`);
+    setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  const filtered = tab === 'unread' ? notifs.filter((n) => !n.isRead) : notifs;
 
   return (
     <div>
@@ -75,7 +89,7 @@ export default function NotificationsPage() {
           <div>
             <h2 className="text-2xl font-extrabold text-on-surface font-headline">Notifications</h2>
             <p className="text-sm text-on-surface-variant mt-0.5">
-              {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
+              {loading ? 'Chargement...' : unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est à jour !'}
             </p>
           </div>
           {unreadCount > 0 && (
@@ -84,21 +98,24 @@ export default function NotificationsPage() {
               className="text-sm font-bold text-primary hover:underline flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-[16px]">done_all</span>
-              Mark all read
+              Tout marquer comme lu
             </button>
           )}
         </div>
 
         {/* Tabs */}
         <div className="flex items-center gap-1 bg-surface-container rounded-xl p-1 w-fit">
-          {TABS.map((t) => (
+          {([
+            { key: 'all'    as FilterTab, label: 'Toutes',    count: notifs.length },
+            { key: 'unread' as FilterTab, label: 'Non lues',  count: unreadCount   },
+          ]).map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg transition-colors ${tab === t.key ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
             >
               {t.label}
-              {t.count !== undefined && t.count > 0 && (
+              {t.count > 0 && (
                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${t.key === 'unread' ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant'}`}>
                   {t.count}
                 </span>
@@ -107,41 +124,47 @@ export default function NotificationsPage() {
           ))}
         </div>
 
-        {/* Notification list */}
-        <div className="space-y-3">
-          {filtered.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => markRead(n.id)}
-              className={`bg-surface-container-lowest rounded-2xl p-5 ambient-shadow cursor-pointer transition-all ${!n.read ? 'border-l-4 border-primary bg-error-container/5' : 'border border-transparent hover:border-outline-variant/20'}`}
-            >
-              <div className="flex items-start gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${ICON_BG[n.type]}`}>
-                  <span className="material-symbols-outlined text-[20px]">{ICONS[n.type]}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className={`font-bold text-sm ${!n.read ? 'text-on-surface' : 'text-on-surface-variant'}`}>
-                      {n.title}
-                    </h3>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {!n.read && <span className="w-2 h-2 rounded-full bg-primary" />}
-                      <span className="text-[10px] text-on-surface-variant font-bold uppercase">{n.time}</span>
-                    </div>
+        {/* List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <span className="material-symbols-outlined animate-spin text-[32px] text-on-surface-variant/40">refresh</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((n) => (
+              <div
+                key={n.id}
+                onClick={() => markRead(n.id)}
+                className={`bg-surface-container-lowest rounded-2xl p-5 ambient-shadow cursor-pointer transition-all ${!n.isRead ? 'border-l-4 border-primary bg-error-container/5' : 'border border-transparent hover:border-outline-variant/20'}`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${ICON_BG[n.type] ?? 'bg-surface-container text-on-surface-variant'}`}>
+                    <span className="material-symbols-outlined text-[20px]">{ICONS[n.type] ?? 'notifications'}</span>
                   </div>
-                  <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{n.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className={`font-bold text-sm ${!n.isRead ? 'text-on-surface' : 'text-on-surface-variant'}`}>
+                        {n.title}
+                      </h3>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary" />}
+                        <span className="text-[10px] text-on-surface-variant font-bold uppercase">{timeAgo(n.createdAt)}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">{n.body}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {filtered.length === 0 && (
-            <div className="py-16 text-center">
-              <span className="material-symbols-outlined text-[48px] text-on-surface-variant/30">notifications_off</span>
-              <p className="text-on-surface-variant font-medium mt-4">No notifications in this category.</p>
-            </div>
-          )}
-        </div>
+            {filtered.length === 0 && (
+              <div className="py-16 text-center">
+                <span className="material-symbols-outlined text-[48px] text-on-surface-variant/30">notifications_off</span>
+                <p className="text-on-surface-variant font-medium mt-4">Aucune notification dans cette catégorie.</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

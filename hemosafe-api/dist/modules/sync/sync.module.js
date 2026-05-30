@@ -8,15 +8,18 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SyncModule = void 0;
 const common_1 = require("@nestjs/common");
+const ioredis_1 = require("@nestjs-modules/ioredis");
 const sync_service_1 = require("./sync.service");
 const sync_controller_1 = require("./sync.controller");
+const idempotency_interceptor_1 = require("../../common/interceptors/idempotency.interceptor");
 let SyncModule = class SyncModule {
 };
 exports.SyncModule = SyncModule;
 exports.SyncModule = SyncModule = __decorate([
     (0, common_1.Module)({
+        imports: [ioredis_1.RedisModule],
         controllers: [sync_controller_1.SyncController],
-        providers: [sync_service_1.SyncService],
+        providers: [sync_service_1.SyncService, idempotency_interceptor_1.IdempotencyInterceptor],
         exports: [sync_service_1.SyncService],
     })
 ], SyncModule);

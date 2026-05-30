@@ -11,18 +11,18 @@ export declare class AuthController {
     }): Promise<import("./auth.service").AuthTokens>;
     logout(userId: string): Promise<void>;
     me(userId: string): Promise<{
-        facility: {
-            name: string;
-            type: import(".prisma/client").$Enums.FacilityType;
-            id: string;
-        } | null;
+        id: string;
         email: string;
         role: import(".prisma/client").$Enums.UserRole;
-        facilityId: string | null;
-        id: string;
         firstName: string;
         lastName: string;
         phone: string | null;
+        facilityId: string | null;
         lastLoginAt: Date | null;
+        facility: {
+            id: string;
+            type: import(".prisma/client").$Enums.FacilityType;
+            name: string;
+        } | null;
     }>;
 }

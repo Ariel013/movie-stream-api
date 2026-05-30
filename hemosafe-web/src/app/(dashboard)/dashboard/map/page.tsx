@@ -1,15 +1,25 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { TopBar } from '@/shared/components/TopBar';
 
+const LeafletMap = dynamic(() => import('./LeafletMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex-1 flex items-center justify-center bg-surface-container-low">
+      <span className="material-symbols-outlined animate-spin text-[32px] text-on-surface-variant/40">refresh</span>
+    </div>
+  ),
+});
+
 const BLOOD_BANKS = [
-  { id: '1', name: 'City Central Blood Bank', address: '8 Avenue Pasteur, Algiers', distanceKm: 2.4, available: 403, status: 'online', lat: 36.7525, lng: 3.042 },
-  { id: '2', name: 'Eastside Medical Storage', address: '45 Rue Ibn Khaldoun, Oran', distanceKm: 5.8, available: 187, status: 'online', lat: 35.697, lng: -0.625 },
-  { id: '3', name: 'North Regional Blood Bank', address: '3 Bd de l\'Indépendance, Constantine', distanceKm: 9.1, available: 92, status: 'online', lat: 36.365, lng: 6.613 },
-  { id: '4', name: 'Western Blood Centre', address: '12 Rue Larbi Tebessi, Tlemcen', distanceKm: 18.3, available: 55, status: 'low', lat: 34.878, lng: -1.315 },
-  { id: '5', name: 'Southern Reserve Unit', address: '7 Route Nationale, Ghardaïa', distanceKm: 42.0, available: 28, status: 'critical', lat: 32.49, lng: 3.674 },
-  { id: '6', name: 'Coastal Blood Bank', address: '4 Corniche, Annaba', distanceKm: 61.2, available: 143, status: 'online', lat: 36.897, lng: 7.748 },
+  { id: '1', name: 'Centre National de Transfusion Sanguine', address: 'Bd de la Corniche, Abidjan (Plateau)', distanceKm: 0.0, available: 524, status: 'online', lat: 5.321,  lng: -4.017 },
+  { id: '2', name: 'Banque de Sang CHU de Cocody',            address: 'Av. Christiani, Cocody, Abidjan',         distanceKm: 8.2,  available: 312, status: 'online', lat: 5.359,  lng: -3.988 },
+  { id: '3', name: 'Banque de Sang CHU de Treichville',       address: 'Av. Giscard d\'Estaing, Treichville',    distanceKm: 4.1,  available: 178, status: 'online', lat: 5.296,  lng: -4.011 },
+  { id: '4', name: 'Banque de Sang CHR de Bouaké',            address: 'Av. du Général de Gaulle, Bouaké',       distanceKm: 340,  available: 89,  status: 'low',    lat: 7.691,  lng: -5.031 },
+  { id: '5', name: 'Banque de Sang CHR de San-Pédro',         address: 'Cité Bac, San-Pédro',                    distanceKm: 360,  available: 34,  status: 'critical', lat: 4.748, lng: -6.636 },
+  { id: '6', name: 'Banque de Sang CHR de Korhogo',           address: 'Rue du Commerce, Korhogo',               distanceKm: 625,  available: 61,  status: 'low',    lat: 9.458,  lng: -5.629 },
 ];
 
 const STATUS_DOT: Record<string, string> = {
@@ -116,35 +126,26 @@ export default function MapPage() {
           )}
         </div>
 
-        {/* Map area */}
-        <div className="flex-1 relative bg-surface-container-low flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-24 h-24 rounded-full bg-surface-container-lowest flex items-center justify-center mx-auto mb-4 ambient-shadow">
-              <span className="material-symbols-outlined text-[48px] text-on-surface-variant/40">map</span>
-            </div>
-            <p className="font-bold text-on-surface-variant">Interactive Leaflet Map</p>
-            <p className="text-sm text-on-surface-variant/70 mt-1 max-w-xs">
-              Blood bank locations with real-time stock indicators render here using react-leaflet + OpenStreetMap.
-            </p>
-            <div className="mt-6 flex items-center justify-center gap-4">
-              {[
-                { label: 'Operational', color: 'bg-tertiary' },
-                { label: 'Low Stock', color: 'bg-amber-500' },
-                { label: 'Critical', color: 'bg-primary' },
-              ].map((l) => (
-                <div key={l.label} className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-                  <div className={`w-3 h-3 rounded-full ${l.color}`} />
-                  {l.label}
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Map area — explicit height required for Leaflet to render */}
+        <div className="flex-1 relative" style={{ height: 'calc(100vh - 64px)' }}>
+          <LeafletMap
+            banks={filtered}
+            selectedId={selected}
+            onSelect={(id) => setSelected(id === selected ? null : id)}
+          />
 
-          {/* Coordinate overlay for demo */}
-          <div className="absolute top-4 right-4 bg-surface-container-lowest rounded-xl p-3 ambient-shadow text-xs text-on-surface-variant">
-            <p className="font-bold text-on-surface mb-1">View Centre</p>
-            <p>36.7525° N, 3.0420° E</p>
-            <p className="mt-1">Zoom: 7 · {BLOOD_BANKS.length} markers</p>
+          {/* Legend overlay */}
+          <div className="absolute bottom-4 left-4 z-[1000] bg-white/90 backdrop-blur rounded-xl p-3 shadow text-xs text-gray-600 flex items-center gap-4">
+            {[
+              { label: 'Operational', color: 'bg-tertiary' },
+              { label: 'Low Stock',   color: 'bg-amber-500' },
+              { label: 'Critical',    color: 'bg-primary' },
+            ].map((l) => (
+              <div key={l.label} className="flex items-center gap-1.5">
+                <div className={`w-3 h-3 rounded-full ${l.color}`} />
+                {l.label}
+              </div>
+            ))}
           </div>
         </div>
       </div>

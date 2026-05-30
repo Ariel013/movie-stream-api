@@ -21,12 +21,12 @@ async function bootstrap() {
   const reflector = app.get(Reflector);
 
   // ── Security ──────────────────────────────────────────────────────────────
-  app.use(helmet());
-  app.use(compression());
   app.enableCors({
     origin: config.get<string>('FRONTEND_URL'),
     credentials: true,
   });
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.use(compression());
 
   // ── API versioning ─────────────────────────────────────────────────────────
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

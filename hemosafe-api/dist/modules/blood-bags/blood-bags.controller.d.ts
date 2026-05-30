@@ -6,6 +6,12 @@ import { JwtPayload } from '../../common/decorators/current-user.decorator';
 export declare class BloodBagsController {
     private readonly service;
     constructor(service: BloodBagsService);
+    listBloodTypes(): import(".prisma/client").Prisma.PrismaPromise<{
+        id: string;
+        aboGroup: import(".prisma/client").$Enums.AboGroup;
+        rhFactor: import(".prisma/client").$Enums.RhFactor;
+        label: string;
+    }[]>;
     findAll(dto: FilterBloodBagsDto, actor: JwtPayload): Promise<{
         data: ({
             bloodType: {
@@ -19,14 +25,12 @@ export declare class BloodBagsController {
                 lastName: string;
             } | null;
             bloodBank: {
-                name: string;
                 id: string;
+                name: string;
                 code: string;
             };
         } & {
             id: string;
-            createdAt: Date;
-            updatedAt: Date;
             code: string;
             bloodTypeId: string;
             donorId: string | null;
@@ -37,6 +41,8 @@ export declare class BloodBagsController {
             expiresAt: Date;
             status: import(".prisma/client").$Enums.BagStatus;
             discardedReason: string | null;
+            createdAt: Date;
+            updatedAt: Date;
         })[];
         total: number;
         page: number;
@@ -51,8 +57,6 @@ export declare class BloodBagsController {
         };
     } & {
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         code: string;
         bloodTypeId: string;
         donorId: string | null;
@@ -63,6 +67,8 @@ export declare class BloodBagsController {
         expiresAt: Date;
         status: import(".prisma/client").$Enums.BagStatus;
         discardedReason: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     })[]>;
     stockSummary(bloodBankId: string, actor: JwtPayload): import(".prisma/client").Prisma.GetBloodBagGroupByPayload<{
         by: "bloodTypeId"[];
@@ -88,22 +94,9 @@ export declare class BloodBagsController {
             firstName: string;
             lastName: string;
         } | null;
-        stockMovements: {
-            id: string;
-            createdAt: Date;
-            bloodBagId: string;
-            movementType: import(".prisma/client").$Enums.MovementType;
-            fromStatus: import(".prisma/client").$Enums.BagStatus;
-            toStatus: import(".prisma/client").$Enums.BagStatus;
-            performedBy: string | null;
-            reservationId: string | null;
-            transferId: string | null;
-            notes: string | null;
-        }[];
         screening: {
             id: string;
             donorId: string;
-            notes: string | null;
             screenedBy: string | null;
             screenedAt: Date;
             hemoglobinGDl: import("@prisma/client/runtime/library").Decimal | null;
@@ -111,16 +104,27 @@ export declare class BloodBagsController {
             weightKg: import("@prisma/client/runtime/library").Decimal | null;
             temperatureC: import("@prisma/client/runtime/library").Decimal | null;
             isPassed: boolean;
+            notes: string | null;
         } | null;
         bloodBank: {
-            name: string;
             id: string;
+            name: string;
             code: string;
         };
+        stockMovements: {
+            id: string;
+            createdAt: Date;
+            notes: string | null;
+            bloodBagId: string;
+            movementType: import(".prisma/client").$Enums.MovementType;
+            fromStatus: import(".prisma/client").$Enums.BagStatus;
+            toStatus: import(".prisma/client").$Enums.BagStatus;
+            performedBy: string | null;
+            reservationId: string | null;
+            transferId: string | null;
+        }[];
     } & {
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         code: string;
         bloodTypeId: string;
         donorId: string | null;
@@ -131,6 +135,8 @@ export declare class BloodBagsController {
         expiresAt: Date;
         status: import(".prisma/client").$Enums.BagStatus;
         discardedReason: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     create(dto: CreateBloodBagDto, actor: JwtPayload): Promise<{
         bloodType: {
@@ -144,14 +150,12 @@ export declare class BloodBagsController {
             lastName: string;
         } | null;
         bloodBank: {
-            name: string;
             id: string;
+            name: string;
             code: string;
         };
     } & {
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         code: string;
         bloodTypeId: string;
         donorId: string | null;
@@ -162,11 +166,11 @@ export declare class BloodBagsController {
         expiresAt: Date;
         status: import(".prisma/client").$Enums.BagStatus;
         discardedReason: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     discard(id: string, dto: DiscardBloodBagDto, actor: JwtPayload): Promise<{
         id: string;
-        createdAt: Date;
-        updatedAt: Date;
         code: string;
         bloodTypeId: string;
         donorId: string | null;
@@ -177,5 +181,7 @@ export declare class BloodBagsController {
         expiresAt: Date;
         status: import(".prisma/client").$Enums.BagStatus;
         discardedReason: string | null;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
 }

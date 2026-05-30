@@ -8,7 +8,9 @@ export class PatientsRepository {
 
   findAll(hospitalId?: string) {
     return this.prisma.patient.findMany({
-      where: hospitalId ? { hospitalId } : undefined,
+      where:   hospitalId ? { hospitalId } : undefined,
+      include: { bloodType: { select: { label: true } } },
+      orderBy: { createdAt: 'desc' },
     });
   }
 

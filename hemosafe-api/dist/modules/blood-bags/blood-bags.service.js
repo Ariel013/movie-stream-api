@@ -24,6 +24,12 @@ let BloodBagsService = BloodBagsService_1 = class BloodBagsService {
         this.events = events;
         this.logger = new common_1.Logger(BloodBagsService_1.name);
     }
+    listBloodTypes() {
+        return this.prisma.bloodType.findMany({
+            select: { id: true, label: true, aboGroup: true, rhFactor: true },
+            orderBy: [{ aboGroup: 'asc' }, { rhFactor: 'desc' }],
+        });
+    }
     findAll(dto, actor) {
         const where = this.buildWhere(dto, actor);
         return this.repo.findAll(where, dto.page ?? 1, dto.limit ?? 20);

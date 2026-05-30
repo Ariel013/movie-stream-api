@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HealthModule = void 0;
 const common_1 = require("@nestjs/common");
+const ioredis_1 = require("@nestjs-modules/ioredis");
 const health_controller_1 = require("./health.controller");
 const health_service_1 = require("./health.service");
 const prisma_module_1 = require("../../prisma/prisma.module");
@@ -16,7 +17,7 @@ let HealthModule = class HealthModule {
 exports.HealthModule = HealthModule;
 exports.HealthModule = HealthModule = __decorate([
     (0, common_1.Module)({
-        imports: [prisma_module_1.PrismaModule],
+        imports: [prisma_module_1.PrismaModule, ioredis_1.RedisModule],
         controllers: [health_controller_1.HealthController],
         providers: [health_service_1.HealthService],
         exports: [health_service_1.HealthService],

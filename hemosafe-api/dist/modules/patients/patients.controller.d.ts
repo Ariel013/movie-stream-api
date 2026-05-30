@@ -4,20 +4,37 @@ import { PatientsService } from './patients.service';
 export declare class PatientsController {
     private readonly patientsService;
     constructor(patientsService: PatientsService);
-    findAll(actor: JwtPayload): import(".prisma/client").Prisma.PrismaPromise<{
+    findAll(actor: JwtPayload): import(".prisma/client").Prisma.PrismaPromise<({
+        bloodType: {
+            label: string;
+        } | null;
+    } & {
         id: string;
+        hospitalId: string;
+        nationalId: string | null;
         firstName: string;
         lastName: string;
+        dob: Date | null;
+        bloodTypeId: string | null;
+        medicalRecordNo: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
-        nationalId: string | null;
-        dob: Date | null;
-        bloodTypeId: string | null;
-        hospitalId: string;
-        medicalRecordNo: string | null;
-    }[]>;
+    })[]>;
     findOne(id: string, actor: JwtPayload): Promise<{
+        hospital: {
+            id: string;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            name: string;
+            type: import(".prisma/client").$Enums.FacilityType;
+            code: string;
+            address: string;
+            regionId: string;
+            phone: string | null;
+            email: string | null;
+        };
         bloodType: {
             id: string;
             aboGroup: import(".prisma/client").$Enums.AboGroup;
@@ -27,10 +44,9 @@ export declare class PatientsController {
         } | null;
         prescriptions: {
             id: string;
-            createdAt: Date;
-            bloodTypeId: string;
-            expiresAt: Date | null;
             hospitalId: string;
+            bloodTypeId: string;
+            createdAt: Date;
             patientId: string;
             physicianId: string;
             quantity: number;
@@ -38,70 +54,58 @@ export declare class PatientsController {
             clinicalNotes: string | null;
             isFulfilled: boolean;
             fulfilledAt: Date | null;
+            expiresAt: Date | null;
         }[];
-        hospital: {
-            name: string;
-            type: import(".prisma/client").$Enums.FacilityType;
-            email: string | null;
-            id: string;
-            phone: string | null;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
-            code: string;
-            address: string;
-            regionId: string;
-        };
     } & {
         id: string;
+        hospitalId: string;
+        nationalId: string | null;
         firstName: string;
         lastName: string;
+        dob: Date | null;
+        bloodTypeId: string | null;
+        medicalRecordNo: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
-        nationalId: string | null;
-        dob: Date | null;
-        bloodTypeId: string | null;
-        hospitalId: string;
-        medicalRecordNo: string | null;
     }>;
     create(dto: CreatePatientDto, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__PatientClient<{
         id: string;
+        hospitalId: string;
+        nationalId: string | null;
         firstName: string;
         lastName: string;
+        dob: Date | null;
+        bloodTypeId: string | null;
+        medicalRecordNo: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
-        nationalId: string | null;
-        dob: Date | null;
-        bloodTypeId: string | null;
-        hospitalId: string;
-        medicalRecordNo: string | null;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     update(id: string, dto: Partial<CreatePatientDto>, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__PatientClient<{
         id: string;
+        hospitalId: string;
+        nationalId: string | null;
         firstName: string;
         lastName: string;
+        dob: Date | null;
+        bloodTypeId: string | null;
+        medicalRecordNo: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
-        nationalId: string | null;
-        dob: Date | null;
-        bloodTypeId: string | null;
-        hospitalId: string;
-        medicalRecordNo: string | null;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
     deactivate(id: string, actor: JwtPayload): import(".prisma/client").Prisma.Prisma__PatientClient<{
         id: string;
+        hospitalId: string;
+        nationalId: string | null;
         firstName: string;
         lastName: string;
+        dob: Date | null;
+        bloodTypeId: string | null;
+        medicalRecordNo: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
-        nationalId: string | null;
-        dob: Date | null;
-        bloodTypeId: string | null;
-        hospitalId: string;
-        medicalRecordNo: string | null;
     }, never, import("@prisma/client/runtime/library").DefaultArgs>;
 }

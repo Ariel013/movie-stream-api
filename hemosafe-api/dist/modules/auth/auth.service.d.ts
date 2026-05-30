@@ -2,10 +2,21 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
-export interface AuthTokens {
+interface Tokens {
     accessToken: string;
     refreshToken: string;
     expiresIn: number;
+}
+export interface AuthTokens extends Tokens {
+    user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+        facilityId: string | null;
+        facilityName: string | null;
+    };
 }
 export declare class AuthService {
     private readonly prisma;
@@ -18,19 +29,20 @@ export declare class AuthService {
     refresh(userId: string, rawRefreshToken: string): Promise<AuthTokens>;
     logout(userId: string): Promise<void>;
     me(userId: string): Promise<{
-        facility: {
-            name: string;
-            type: import(".prisma/client").$Enums.FacilityType;
-            id: string;
-        } | null;
+        id: string;
         email: string;
         role: import(".prisma/client").$Enums.UserRole;
-        facilityId: string | null;
-        id: string;
         firstName: string;
         lastName: string;
         phone: string | null;
+        facilityId: string | null;
         lastLoginAt: Date | null;
+        facility: {
+            id: string;
+            type: import(".prisma/client").$Enums.FacilityType;
+            name: string;
+        } | null;
     }>;
     private generateTokens;
 }
+export {};

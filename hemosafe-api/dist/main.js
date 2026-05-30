@@ -19,12 +19,12 @@ async function bootstrap() {
     const config = app.get(config_1.ConfigService);
     const prisma = app.get(prisma_service_1.PrismaService);
     const reflector = app.get(core_1.Reflector);
-    app.use((0, helmet_1.default)());
-    app.use(compression());
     app.enableCors({
         origin: config.get('FRONTEND_URL'),
         credentials: true,
     });
+    app.use((0, helmet_1.default)({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+    app.use(compression());
     app.enableVersioning({ type: common_1.VersioningType.URI, defaultVersion: '1' });
     app.setGlobalPrefix('api');
     app.useGlobalPipes(new common_1.ValidationPipe({

@@ -25,7 +25,7 @@
 
 ## Présentation
 
-HEMOSAFE est une application web Progressive (PWA) destinée à la gestion centralisée du stock de sang dans les établissements de santé algériens. Elle permet :
+HEMOSAFE est une application web Progressive (PWA) destinée à la gestion centralisée du stock de sang dans les établissements de santé d'un pays. Elle permet :
 
 - La **recherche géolocalisée** de poches de sang disponibles par groupe/rhésus et rayon
 - La **réservation** de poches depuis n'importe quel hôpital vers n'importe quelle banque de sang

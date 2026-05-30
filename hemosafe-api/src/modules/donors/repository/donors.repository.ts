@@ -7,7 +7,11 @@ export class DonorsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   findAll(where?: Prisma.DonorWhereInput) {
-    return this.prisma.donor.findMany({ where });
+    return this.prisma.donor.findMany({
+      where,
+      include: { bloodType: { select: { label: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   findById(id: string) {

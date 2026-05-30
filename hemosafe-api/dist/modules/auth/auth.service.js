@@ -26,6 +26,7 @@ let AuthService = class AuthService {
     async login(dto, ip) {
         const user = await this.prisma.user.findUnique({
             where: { email: dto.email },
+            include: { facility: { select: { name: true } } },
         });
         if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
             throw new common_1.UnauthorizedException('Invalid email or password');
@@ -41,10 +42,24 @@ let AuthService = class AuthService {
                 lastLoginAt: new Date(),
             },
         });
-        return tokens;
+        return {
+            ...tokens,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                facilityId: user.facilityId,
+                facilityName: user.facility?.name ?? null,
+            },
+        };
     }
     async refresh(userId, rawRefreshToken) {
-        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            include: { facility: { select: { name: true } } },
+        });
         if (!user?.refreshToken || !user.isActive) {
             throw new common_1.ForbiddenException('Access denied');
         }
@@ -56,7 +71,18 @@ let AuthService = class AuthService {
             where: { id: user.id },
             data: { refreshToken: await bcrypt.hash(tokens.refreshToken, 10) },
         });
-        return tokens;
+        return {
+            ...tokens,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                facilityId: user.facilityId,
+                facilityName: user.facility?.name ?? null,
+            },
+        };
     }
     async logout(userId) {
         await this.prisma.user.update({

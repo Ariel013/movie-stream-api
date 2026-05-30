@@ -17,7 +17,11 @@ let DonorsRepository = class DonorsRepository {
         this.prisma = prisma;
     }
     findAll(where) {
-        return this.prisma.donor.findMany({ where });
+        return this.prisma.donor.findMany({
+            where,
+            include: { bloodType: { select: { label: true } } },
+            orderBy: { createdAt: 'desc' },
+        });
     }
     findById(id) {
         return this.prisma.donor.findUnique({

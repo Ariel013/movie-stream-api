@@ -8,10 +8,22 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
-export interface AuthTokens {
+interface Tokens {
   accessToken:  string;
   refreshToken: string;
   expiresIn:    number;
+}
+
+export interface AuthTokens extends Tokens {
+  user: {
+    id:           string;
+    email:        string;
+    firstName:    string;
+    lastName:     string;
+    role:         string;
+    facilityId:   string | null;
+    facilityName: string | null;
+  };
 }
 
 @Injectable()
@@ -30,6 +42,7 @@ export class AuthService {
   async login(dto: LoginDto, ip: string): Promise<AuthTokens> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: { facility: { select: { name: true } } },
     });
 
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
@@ -51,13 +64,27 @@ export class AuthService {
       },
     });
 
-    return tokens;
+    return {
+      ...tokens,
+      user: {
+        id:           user.id,
+        email:        user.email,
+        firstName:    user.firstName,
+        lastName:     user.lastName,
+        role:         user.role,
+        facilityId:   user.facilityId,
+        facilityName: user.facility?.name ?? null,
+      },
+    };
   }
 
   // ── Refresh ────────────────────────────────────────────────────────────────
 
   async refresh(userId: string, rawRefreshToken: string): Promise<AuthTokens> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { facility: { select: { name: true } } },
+    });
 
     if (!user?.refreshToken || !user.isActive) {
       throw new ForbiddenException('Access denied');
@@ -73,7 +100,18 @@ export class AuthService {
       data: { refreshToken: await bcrypt.hash(tokens.refreshToken, 10) },
     });
 
-    return tokens;
+    return {
+      ...tokens,
+      user: {
+        id:           user.id,
+        email:        user.email,
+        firstName:    user.firstName,
+        lastName:     user.lastName,
+        role:         user.role,
+        facilityId:   user.facilityId,
+        facilityName: user.facility?.name ?? null,
+      },
+    };
   }
 
   // ── Logout ─────────────────────────────────────────────────────────────────
@@ -103,7 +141,7 @@ export class AuthService {
 
   private async generateTokens(
     user: { id: string; email: string; role: string; facilityId: string | null },
-  ): Promise<AuthTokens> {
+  ): Promise<Tokens> {
     const payload: JwtPayload = {
       sub:        user.id,
       email:      user.email,

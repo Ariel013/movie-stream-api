@@ -19,6 +19,8 @@ let PatientsRepository = class PatientsRepository {
     findAll(hospitalId) {
         return this.prisma.patient.findMany({
             where: hospitalId ? { hospitalId } : undefined,
+            include: { bloodType: { select: { label: true } } },
+            orderBy: { createdAt: 'desc' },
         });
     }
     findById(id) {

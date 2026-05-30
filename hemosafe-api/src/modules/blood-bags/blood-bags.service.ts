@@ -22,6 +22,15 @@ export class BloodBagsService {
     private readonly events: EventEmitter2,
   ) {}
 
+  // ── Reference data ─────────────────────────────────────────────────────────
+
+  listBloodTypes() {
+    return this.prisma.bloodType.findMany({
+      select: { id: true, label: true, aboGroup: true, rhFactor: true },
+      orderBy: [{ aboGroup: 'asc' }, { rhFactor: 'desc' }],
+    });
+  }
+
   // ── Queries ────────────────────────────────────────────────────────────────
 
   findAll(dto: FilterBloodBagsDto, actor: JwtPayload) {

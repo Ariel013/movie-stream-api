@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Patch, Body, Param,
   Query, ParseUUIDPipe, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { BloodBagsService } from './blood-bags.service';
 import { CreateBloodBagDto } from './dto/create-blood-bag.dto';
@@ -20,6 +20,12 @@ import { AuditEntity } from '../../common/decorators/audit.decorator';
 @Controller({ path: 'blood-bags', version: '1' })
 export class BloodBagsController {
   constructor(private readonly service: BloodBagsService) {}
+
+  @Get('types')
+  @ApiOperation({ summary: 'List all blood types with UUIDs (reference data)' })
+  listBloodTypes() {
+    return this.service.listBloodTypes();
+  }
 
   @Get()
   @ApiOperation({ summary: 'List blood bags with filters (FEFO order)' })

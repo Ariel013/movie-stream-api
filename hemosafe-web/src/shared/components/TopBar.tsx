@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/shared/store/auth.store';
 import api from '@/shared/lib/api';
-import Link from 'next/link';
 
 const ROLE_LABELS = {
   ADMIN: 'Admin Role',
@@ -11,11 +10,13 @@ const ROLE_LABELS = {
   BLOOD_BANK: 'Blood Bank Role',
 };
 
-interface TopBarProps {
-  title?: string;
-}
+const ROLE_ICONS = {
+  ADMIN: 'admin_panel_settings',
+  HOSPITAL: 'medical_services',
+  BLOOD_BANK: 'bloodtype',
+};
 
-export function TopBar({ title }: TopBarProps) {
+export function TopBar(_: { title?: string } = {}) {
   const router = useRouter();
   const { user, logout } = useAuthStore();
 
@@ -29,62 +30,51 @@ export function TopBar({ title }: TopBarProps) {
   };
 
   return (
-    <header className="h-16 glass-nav border-b border-outline-variant/10 sticky top-0 z-10 flex items-center justify-between px-8">
-      {/* Left */}
-      <div className="flex items-center gap-4">
-        {title && (
-          <h1 className="text-lg font-extrabold text-on-surface tracking-tight font-headline">{title}</h1>
-        )}
-        {user && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-primary/5 rounded-full border border-primary/10">
-            <span className="material-symbols-outlined text-[14px] text-primary">verified_user</span>
-            <span className="text-[10px] font-bold text-primary uppercase tracking-widest">
-              {ROLE_LABELS[user.role]}
-            </span>
-          </div>
-        )}
+    <header className="glass-nav sticky top-0 z-10 px-10 py-4 flex items-center justify-between">
+
+      {/* Left – app name + search */}
+      <div className="flex items-center gap-8 w-1/2">
+        <h1 className="text-xl font-bold text-primary font-headline whitespace-nowrap">BloodConnect</h1>
+        <div className="relative w-full max-w-md">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+          <input
+            type="text"
+            placeholder="Search across clinical records..."
+            className="w-full bg-surface-container-low border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+          />
+        </div>
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-4">
-        {/* Search */}
-        <div className="relative hidden md:flex items-center">
-          <span className="material-symbols-outlined absolute left-3 text-on-surface-variant text-[18px]">search</span>
-          <input
-            type="text"
-            placeholder="Search..."
-            className="bg-surface-container-low border-none rounded-full py-2 pl-9 pr-4 text-sm focus:ring-1 focus:ring-primary/20 w-52"
-          />
-        </div>
+      <div className="flex items-center gap-6">
 
-        {/* Online indicator */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-tertiary-container/10 text-tertiary rounded-full">
-          <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
-          <span className="text-xs font-semibold">System Online</span>
-        </div>
+        {/* Role badge */}
+        {user && (
+          <div className="flex items-center gap-2 px-3 py-1 bg-secondary-container rounded-full">
+            <span className="material-symbols-outlined text-sm text-secondary">{ROLE_ICONS[user.role]}</span>
+            <span className="text-[10px] font-bold text-secondary uppercase tracking-tighter">{ROLE_LABELS[user.role]}</span>
+          </div>
+        )}
 
         {/* Notifications */}
-        <Link
-          href="/dashboard/notifications"
-          className="relative w-9 h-9 flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors"
-        >
-          <span className="material-symbols-outlined text-[20px]">notifications</span>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full ring-2 ring-white" />
-        </Link>
+        <button className="relative text-on-surface-variant">
+          <span className="material-symbols-outlined">notifications</span>
+          <span className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full" />
+        </button>
 
-        {/* Avatar + logout */}
-        <div className="flex items-center gap-3 pl-4 border-l border-outline-variant/20">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-bold text-on-surface">
+        {/* User info + logout */}
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-xs font-bold text-on-surface">
               {user ? `${user.firstName} ${user.lastName}` : '—'}
             </p>
-            <p className="text-[10px] text-on-surface-variant font-medium">
+            <p className="text-[10px] text-on-surface-variant">
               {user?.facilityName ?? user?.email ?? ''}
             </p>
           </div>
           <button
             onClick={handleLogout}
-            className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center text-white text-[16px] hover:opacity-90 transition-opacity"
+            className="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors"
             title="Logout"
           >
             <span className="material-symbols-outlined text-[18px]">logout</span>

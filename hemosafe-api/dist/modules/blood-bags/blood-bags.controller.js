@@ -29,6 +29,9 @@ let BloodBagsController = class BloodBagsController {
     constructor(service) {
         this.service = service;
     }
+    listBloodTypes() {
+        return this.service.listBloodTypes();
+    }
     findAll(dto, actor) {
         return this.service.findAll(dto, actor);
     }
@@ -49,6 +52,13 @@ let BloodBagsController = class BloodBagsController {
     }
 };
 exports.BloodBagsController = BloodBagsController;
+__decorate([
+    (0, common_1.Get)('types'),
+    (0, swagger_1.ApiOperation)({ summary: 'List all blood types with UUIDs (reference data)' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], BloodBagsController.prototype, "listBloodTypes", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'List blood bags with filters (FEFO order)' }),
