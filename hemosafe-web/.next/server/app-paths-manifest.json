@@ -1,7 +1,0 @@
-{
-  "/(dashboard)/dashboard/reservations/page": "app/(dashboard)/dashboard/reservations/page.js",
-  "/(dashboard)/dashboard/notifications/page": "app/(dashboard)/dashboard/notifications/page.js",
-  "/(dashboard)/dashboard/stock/page": "app/(dashboard)/dashboard/stock/page.js",
-  "/(auth)/auth/login/page": "app/(auth)/auth/login/page.js",
-  "/(dashboard)/dashboard/blood-search/page": "app/(dashboard)/dashboard/blood-search/page.js"
-}

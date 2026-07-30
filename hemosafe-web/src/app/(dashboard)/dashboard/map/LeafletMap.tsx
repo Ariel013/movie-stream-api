@@ -9,7 +9,6 @@ interface BloodBank {
   id: string;
   name: string;
   address: string;
-  distanceKm: number;
   available: number;
   status: string;
   lat: number;

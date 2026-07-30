@@ -31,15 +31,20 @@ const STATUS_STYLE: Record<string, string> = {
   DISCARDED:   'bg-surface-container text-on-surface-variant',
 };
 
+const PAGE_SIZE = 10;
+const STATUSES_FOR_SUMMARY = ['AVAILABLE', 'RESERVED', 'DISTRIBUTED', 'EXPIRED'] as const;
+
 export default function StockPage() {
   const role = useAuthStore((s) => s.user?.role);
 
   const [bags, setBags]               = useState<StockItem[]>([]);
   const [total, setTotal]             = useState(0);
+  const [page, setPage]               = useState(1);
   const [loading, setLoading]         = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [search, setSearch]           = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [summaryCounts, setSummaryCounts] = useState<Record<string, number>>({});
 
   // Add form state
   const [bloodTypes, setBloodTypes]   = useState<BloodType[]>([]);
@@ -51,9 +56,18 @@ export default function StockPage() {
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   const fetchBags = () => {
     setLoading(true);
-    api.get('/blood-bags', { params: { limit: 100 } })
+    api.get('/blood-bags', {
+      params: {
+        page,
+        limit: PAGE_SIZE,
+        ...(statusFilter !== 'ALL' && { status: statusFilter }),
+        ...(search.trim() && { code: search.trim() }),
+      },
+    })
       .then((res) => {
         const result = res.data.data;
         setBags(result.data ?? []);
@@ -63,17 +77,31 @@ export default function StockPage() {
       .finally(() => setLoading(false));
   };
 
+  // Global counts per status — independent of the current page/filter/search,
+  // so the summary cards always reflect the whole stock, not just what's shown.
+  const fetchSummaryCounts = () => {
+    Promise.all(
+      STATUSES_FOR_SUMMARY.map((status) =>
+        api.get('/blood-bags', { params: { status, limit: 1 } }).then((res) => res.data.data.total ?? 0),
+      ),
+    ).then((counts) => {
+      setSummaryCounts(Object.fromEntries(STATUSES_FOR_SUMMARY.map((s, i) => [s, counts[i]])));
+    });
+  };
+
   useEffect(() => {
     fetchBags();
+  }, [page, statusFilter, search]);
+
+  useEffect(() => {
+    fetchSummaryCounts();
     api.get('/blood-bags/types').then((res) => setBloodTypes(res.data.data ?? []));
   }, []);
 
-  const filtered = bags.filter((s) => {
-    if (statusFilter !== 'ALL' && s.status !== statusFilter) return false;
-    const q = search.toLowerCase();
-    if (q && !s.code.toLowerCase().includes(q) && !s.bloodType.label.toLowerCase().includes(q)) return false;
-    return true;
-  });
+  // Any change to the filters invalidates the current page.
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search]);
 
   const isExpiringSoon = (date: string) => {
     const daysLeft = Math.ceil((new Date(date).getTime() - Date.now()) / 86400000);
@@ -81,10 +109,10 @@ export default function StockPage() {
   };
 
   const summary = [
-    { label: 'Disponibles',  count: bags.filter((b) => b.status === 'AVAILABLE').length,   icon: 'check_circle',   color: 'text-tertiary' },
-    { label: 'Réservées',    count: bags.filter((b) => b.status === 'RESERVED').length,     icon: 'hourglass_top',  color: 'text-amber-600' },
-    { label: 'Distribuées',  count: bags.filter((b) => b.status === 'DISTRIBUTED').length,  icon: 'local_shipping', color: 'text-secondary' },
-    { label: 'Expirées',     count: bags.filter((b) => b.status === 'EXPIRED').length,      icon: 'cancel',         color: 'text-primary' },
+    { label: 'Disponibles',  count: summaryCounts.AVAILABLE ?? 0,   icon: 'check_circle',   color: 'text-tertiary' },
+    { label: 'Réservées',    count: summaryCounts.RESERVED ?? 0,    icon: 'hourglass_top',  color: 'text-amber-600' },
+    { label: 'Distribuées',  count: summaryCounts.DISTRIBUTED ?? 0, icon: 'local_shipping', color: 'text-secondary' },
+    { label: 'Expirées',     count: summaryCounts.EXPIRED ?? 0,     icon: 'cancel',         color: 'text-primary' },
   ];
 
   const handleRegister = async () => {
@@ -108,6 +136,7 @@ export default function StockPage() {
       setShowAddModal(false);
       setForm({ code: '', aboGroup: 'O', rhFactor: 'POSITIVE', volumeMl: 450, collectedAt: new Date().toISOString().slice(0, 10), expiresAt: '' });
       fetchBags();
+      fetchSummaryCounts();
     } catch (e: any) {
       const msg = e?.response?.data?.message;
       setSubmitError(typeof msg === 'string' ? msg : 'Erreur lors de l\'enregistrement.');
@@ -199,11 +228,11 @@ export default function StockPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px] text-on-surface-variant/40">refresh</span>
                     </td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : bags.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant">Aucune poche ne correspond à vos filtres.</td>
                   </tr>
-                ) : filtered.map((item) => (
+                ) : bags.map((item) => (
                   <tr key={item.id} className={`hover:bg-surface-container-low/50 transition-colors ${item.status === 'EXPIRED' ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 font-mono text-xs font-bold text-on-surface">{item.code}</td>
                     <td className="px-6 py-4">
@@ -242,6 +271,30 @@ export default function StockPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+              <p className="text-xs text-on-surface-variant">
+                Page {page} sur {totalPages} · {total} résultat{total > 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

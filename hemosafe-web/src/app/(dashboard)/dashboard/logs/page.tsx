@@ -26,30 +26,52 @@ function extractMethod(action: string): string {
   return action.split(' ')[0] ?? action;
 }
 
+const PAGE_SIZE = 10;
+
 export default function LogsPage() {
   const [logs, setLogs]               = useState<AuditLog[]>([]);
+  const [total, setTotal]             = useState(0);
+  const [page, setPage]               = useState(1);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState('');
   const [entityFilter, setEntityFilter] = useState('ALL');
+  const [entities, setEntities]       = useState<string[]>(['ALL']);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const fetchLogs = () => {
+    setLoading(true);
+    api.get('/audit-logs', {
+      params: {
+        page,
+        limit: PAGE_SIZE,
+        ...(entityFilter !== 'ALL' && { entity: entityFilter }),
+        ...(search.trim() && { search: search.trim() }),
+      },
+    })
+      .then((res) => {
+        const result = res.data.data;
+        setLogs(result.data ?? []);
+        setTotal(result.total ?? 0);
+      })
+      .catch(() => { setLogs([]); setTotal(0); })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    api.get('/audit-logs', { params: { limit: 200 } })
-      .then((res) => setLogs(res.data.data?.data ?? []))
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
+    fetchLogs();
+  }, [page, entityFilter, search]);
+
+  // Entity list fetched once, independent of pagination — so the filter pills
+  // don't shift around as you page through the log (unlike deriving them from
+  // whatever happens to be on the current page).
+  useEffect(() => {
+    api.get('/audit-logs/entities').then((res) => setEntities(['ALL', ...(res.data.data ?? [])]));
   }, []);
 
-  const entities = ['ALL', ...Array.from(new Set(logs.map((l) => l.entity)))].sort();
-
-  const filtered = logs.filter((l) => {
-    if (entityFilter !== 'ALL' && l.entity !== entityFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      const actor = l.user ? `${l.user.firstName} ${l.user.lastName}` : '';
-      if (!actor.toLowerCase().includes(q) && !(l.entityId ?? '').toLowerCase().includes(q) && !l.action.toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
+  useEffect(() => {
+    setPage(1);
+  }, [entityFilter, search]);
 
   return (
     <div>
@@ -107,13 +129,13 @@ export default function LogsPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px] text-on-surface-variant/40">refresh</span>
                     </td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : logs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant font-sans">
                       Aucun journal ne correspond à vos filtres.
                     </td>
                   </tr>
-                ) : filtered.map((log) => {
+                ) : logs.map((log) => {
                   const method = extractMethod(log.action);
                   const actor  = log.user ? `${log.user.firstName} ${log.user.lastName}` : '—';
                   return (
@@ -144,6 +166,30 @@ export default function LogsPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+              <p className="text-xs text-on-surface-variant">
+                Page {page} sur {totalPages} · {total} résultat{total > 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

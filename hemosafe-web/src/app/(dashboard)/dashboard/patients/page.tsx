@@ -21,11 +21,16 @@ function calcAge(dob: string | null): string {
   return String(Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 86400000)));
 }
 
+const PAGE_SIZE = 10;
+
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [summaryCounts, setSummaryCounts] = useState({ active: 0, inactive: 0, total: 0 });
 
   const [showModal, setShowModal]   = useState(false);
   const [bloodTypes, setBloodTypes] = useState<{ id: string; label: string; aboGroup: string; rhFactor: string }[]>([]);
@@ -33,32 +38,56 @@ export default function PatientsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  useEffect(() => {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const fetchPatients = () => {
+    setLoading(true);
+    api.get('/patients', {
+      params: {
+        page,
+        limit: PAGE_SIZE,
+        ...(search.trim() && { search: search.trim() }),
+        ...(activeFilter !== 'ALL' && { isActive: activeFilter === 'ACTIVE' }),
+      },
+    })
+      .then((res) => {
+        const result = res.data.data;
+        setPatients(result.data ?? []);
+        setTotal(result.total ?? 0);
+      })
+      .catch(() => { setPatients([]); setTotal(0); })
+      .finally(() => setLoading(false));
+  };
+
+  // True global counts, independent of the current page/search/filter.
+  const fetchSummaryCounts = () => {
     Promise.all([
-      api.get('/patients'),
-      api.get('/blood-bags/types'),
-    ]).then(([pRes, tRes]) => {
-      setPatients(pRes.data.data ?? []);
-      setBloodTypes(tRes.data.data ?? []);
-    }).finally(() => setLoading(false));
+      api.get('/patients', { params: { isActive: true, limit: 1 } }).then((r) => r.data.data.total ?? 0),
+      api.get('/patients', { params: { isActive: false, limit: 1 } }).then((r) => r.data.data.total ?? 0),
+    ]).then(([active, inactive]) => {
+      setSummaryCounts({ active, inactive, total: active + inactive });
+    });
+  };
+
+  useEffect(() => {
+    fetchPatients();
+  }, [page, search, activeFilter]);
+
+  useEffect(() => {
+    fetchSummaryCounts();
+    api.get('/blood-bags/types').then((res) => setBloodTypes(res.data.data ?? []));
   }, []);
 
-  const filtered = patients.filter((p) => {
-    if (activeFilter === 'ACTIVE' && !p.isActive) return false;
-    if (activeFilter === 'INACTIVE' && p.isActive) return false;
-    const q = search.toLowerCase();
-    if (q && !`${p.firstName} ${p.lastName}`.toLowerCase().includes(q) &&
-        !(p.nationalId ?? '').toLowerCase().includes(q) &&
-        !(p.medicalRecordNo ?? '').toLowerCase().includes(q)) return false;
-    return true;
-  });
+  useEffect(() => {
+    setPage(1);
+  }, [search, activeFilter]);
 
   const handleAdd = async () => {
     const bt = bloodTypes.find((t) => t.aboGroup === form.aboGroup && t.rhFactor === form.rhFactor);
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await api.post('/patients', {
+      await api.post('/patients', {
         firstName:      form.firstName,
         lastName:       form.lastName,
         nationalId:     form.nationalId || undefined,
@@ -66,9 +95,10 @@ export default function PatientsPage() {
         dob:            form.dob || undefined,
         bloodTypeId:    bt?.id,
       });
-      setPatients((prev) => [res.data.data, ...prev]);
       setShowModal(false);
       setForm({ firstName: '', lastName: '', nationalId: '', medicalRecordNo: '', dob: '', aboGroup: 'O', rhFactor: 'POSITIVE' });
+      fetchPatients();
+      fetchSummaryCounts();
     } catch (e: any) {
       const msg = e?.response?.data?.message;
       setSubmitError(typeof msg === 'string' ? msg : 'Erreur lors de l\'enregistrement.');
@@ -99,9 +129,9 @@ export default function PatientsPage() {
         {/* Summary */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {[
-            { label: 'Total patients', count: patients.length,                         icon: 'person',          color: 'text-secondary' },
-            { label: 'Actifs',        count: patients.filter((p) => p.isActive).length, icon: 'personal_injury', color: 'text-primary' },
-            { label: 'Inactifs',      count: patients.filter((p) => !p.isActive).length, icon: 'person_off',    color: 'text-on-surface-variant' },
+            { label: 'Total patients', count: summaryCounts.total,    icon: 'person',          color: 'text-secondary' },
+            { label: 'Actifs',        count: summaryCounts.active,    icon: 'personal_injury', color: 'text-primary' },
+            { label: 'Inactifs',      count: summaryCounts.inactive,  icon: 'person_off',      color: 'text-on-surface-variant' },
           ].map((s) => (
             <div key={s.label} className="bg-surface-container-lowest rounded-2xl p-5 ambient-shadow border border-outline-variant/10 flex items-center gap-4">
               <span className={`material-symbols-outlined text-[28px] ${s.color}`}>{s.icon}</span>
@@ -160,11 +190,11 @@ export default function PatientsPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px] text-on-surface-variant/40">refresh</span>
                     </td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : patients.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant">Aucun patient trouvé.</td>
                   </tr>
-                ) : filtered.map((p) => (
+                ) : patients.map((p) => (
                   <tr key={p.id} className="hover:bg-surface-container-low/50 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs font-bold text-on-surface">{p.medicalRecordNo ?? '—'}</td>
                     <td className="px-6 py-4 font-medium text-on-surface">{p.firstName} {p.lastName}</td>
@@ -194,6 +224,30 @@ export default function PatientsPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+              <p className="text-xs text-on-surface-variant">
+                Page {page} sur {totalPages} · {total} résultat{total > 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

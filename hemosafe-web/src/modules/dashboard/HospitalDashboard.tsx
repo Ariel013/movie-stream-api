@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TopBar } from '@/shared/components/TopBar';
 import api from '@/shared/lib/api';
+import { useAuthStore } from '@/shared/store/auth.store';
 
 interface NearbyBank {
   id: string;
@@ -23,25 +24,41 @@ interface Reservation {
   bloodBank: { name: string };
 }
 
-// Abidjan centre as default coordinates for hospital-side nearby search
+// Abidjan centre — fallback only, used when the hospital itself has no
+// registered position yet (see the lat/lng-on-create fix; older facilities
+// created before that fix may still be missing one).
 const DEFAULT_LAT = 5.355;
 const DEFAULT_LNG = -4.008;
 
 export function HospitalDashboard() {
+  const facilityId = useAuthStore((s) => s.user?.facilityId);
   const [nearbyBanks, setNearbyBanks] = useState<NearbyBank[]>([]);
   const [activeRes, setActiveRes]     = useState<Reservation[]>([]);
   const [loading, setLoading]         = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get('/blood-banks/nearby', { params: { lat: DEFAULT_LAT, lng: DEFAULT_LNG, radiusKm: 100 } }),
-      api.get('/reservations'),
-    ]).then(([banksRes, resRes]) => {
-      setNearbyBanks((banksRes.data.data ?? []).slice(0, 3));
-      const all: Reservation[] = resRes.data.data ?? [];
-      setActiveRes(all.filter((r) => ['PENDING', 'CONFIRMED', 'DISPATCHED'].includes(r.status)));
-    }).finally(() => setLoading(false));
-  }, []);
+    const resolveOrigin = facilityId
+      ? api.get(`/hospitals/${facilityId}`)
+          .then((res) => {
+            const h = res.data.data;
+            return h?.lat != null && h?.lng != null
+              ? { lat: h.lat, lng: h.lng }
+              : { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
+          })
+          .catch(() => ({ lat: DEFAULT_LAT, lng: DEFAULT_LNG }))
+      : Promise.resolve({ lat: DEFAULT_LAT, lng: DEFAULT_LNG });
+
+    resolveOrigin.then((origin) => {
+      Promise.all([
+        api.get('/blood-banks/nearby', { params: { ...origin, radiusKm: 100 } }),
+        api.get('/reservations'),
+      ]).then(([banksRes, resRes]) => {
+        setNearbyBanks((banksRes.data.data ?? []).slice(0, 3));
+        const all: Reservation[] = resRes.data.data ?? [];
+        setActiveRes(all.filter((r) => ['PENDING', 'CONFIRMED', 'DISPATCHED'].includes(r.status)));
+      }).finally(() => setLoading(false));
+    });
+  }, [facilityId]);
 
   const isUrgent = (r: Reservation) =>
     r.urgency === 'EMERGENCY' || (new Date(r.expiresAt).getTime() - Date.now()) < 3 * 3600 * 1000;

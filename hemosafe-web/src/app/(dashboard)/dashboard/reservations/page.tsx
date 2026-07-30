@@ -35,28 +35,46 @@ const URGENCY_STYLES: Record<string, string> = {
   EMERGENCY: 'bg-error-container text-primary',
 };
 
-const FILTER_OPTIONS: (ReservationStatus | 'ALL')[] = ['ALL', 'PENDING', 'CONFIRMED', 'DISPATCHED', 'DELIVERED', 'CANCELLED'];
+const FILTER_OPTIONS: (ReservationStatus | 'ALL')[] = ['ALL', 'PENDING', 'CONFIRMED', 'DISPATCHED', 'DELIVERED', 'EXPIRED', 'CANCELLED'];
+const PAGE_SIZE = 10;
 
 export default function ReservationsPage() {
   const role = useAuthStore((s) => s.user?.role);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [total, setTotal]               = useState(0);
+  const [page, setPage]                 = useState(1);
   const [loading, setLoading]           = useState(true);
   const [filter, setFilter]             = useState<ReservationStatus | 'ALL'>('ALL');
   const [search, setSearch]             = useState('');
 
-  useEffect(() => {
-    api.get('/reservations')
-      .then((res) => setReservations(res.data.data ?? []))
-      .catch(() => setReservations([]))
-      .finally(() => setLoading(false));
-  }, []);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const filtered = reservations.filter((r) => {
-    if (filter !== 'ALL' && r.status !== filter) return false;
-    const q = search.toLowerCase();
-    if (q && !r.code.toLowerCase().includes(q) && !r.hospital.name.toLowerCase().includes(q)) return false;
-    return true;
-  });
+  const fetchReservations = () => {
+    setLoading(true);
+    api.get('/reservations', {
+      params: {
+        page,
+        limit: PAGE_SIZE,
+        ...(filter !== 'ALL' && { status: filter }),
+        ...(search.trim() && { search: search.trim() }),
+      },
+    })
+      .then((res) => {
+        const result = res.data.data;
+        setReservations(result.data ?? []);
+        setTotal(result.total ?? 0);
+      })
+      .catch(() => { setReservations([]); setTotal(0); })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchReservations();
+  }, [page, filter, search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search]);
 
   return (
     <div>
@@ -122,13 +140,13 @@ export default function ReservationsPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px] text-on-surface-variant/40">refresh</span>
                     </td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : reservations.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="px-6 py-12 text-center text-on-surface-variant">
                       Aucune réservation ne correspond à vos filtres.
                     </td>
                   </tr>
-                ) : filtered.map((r) => (
+                ) : reservations.map((r) => (
                   <tr key={r.id} className="hover:bg-surface-container-low/50 transition-colors">
                     <td className="px-6 py-4 font-mono text-xs font-bold text-on-surface">{r.code}</td>
                     <td className="px-6 py-4 font-medium text-on-surface">{r.hospital.name}</td>
@@ -163,6 +181,30 @@ export default function ReservationsPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+              <p className="text-xs text-on-surface-variant">
+                Page {page} sur {totalPages} · {total} résultat{total > 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

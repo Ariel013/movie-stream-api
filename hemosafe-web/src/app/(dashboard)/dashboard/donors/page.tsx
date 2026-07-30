@@ -32,12 +32,17 @@ function calcAge(dob: string): number {
   return Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 86400000));
 }
 
+const PAGE_SIZE = 10;
+
 export default function DonorsPage() {
   const [donors, setDonors]             = useState<Donor[]>([]);
+  const [total, setTotal]               = useState(0);
+  const [page, setPage]                 = useState(1);
   const [loading, setLoading]           = useState(true);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ELIGIBLE' | 'INELIGIBLE'>('ALL');
   const [search, setSearch]             = useState('');
   const [showModal, setShowModal]       = useState(false);
+  const [summaryCounts, setSummaryCounts] = useState({ eligible: 0, ineligible: 0, donations: 0, total: 0 });
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', dob: '', phone: '', nationalId: '',
@@ -47,26 +52,55 @@ export default function DonorsPage() {
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  useEffect(() => {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const fetchDonors = () => {
+    setLoading(true);
+    api.get('/donors', {
+      params: {
+        page,
+        limit: PAGE_SIZE,
+        ...(search.trim() && { search: search.trim() }),
+        ...(statusFilter !== 'ALL' && { isEligible: statusFilter === 'ELIGIBLE' }),
+      },
+    })
+      .then((res) => {
+        const result = res.data.data;
+        setDonors(result.data ?? []);
+        setTotal(result.total ?? 0);
+      })
+      .catch(() => { setDonors([]); setTotal(0); })
+      .finally(() => setLoading(false));
+  };
+
+  // True global counts (eligible/ineligible), independent of the current
+  // page/search/filter — same trick as the Stock page: read `.total` from a
+  // cheap limit=1 call per status instead of summing whatever's on screen.
+  // Total donations is a bounded best-effort sum (capped at 500 donors).
+  const fetchSummaryCounts = () => {
     Promise.all([
-      api.get('/donors'),
-      api.get('/blood-bags/types'),
-    ]).then(([donorsRes, typesRes]) => {
-      setDonors(donorsRes.data.data ?? []);
-      setBloodTypes(typesRes.data.data ?? []);
-    }).finally(() => setLoading(false));
+      api.get('/donors', { params: { isEligible: true, limit: 1 } }).then((r) => r.data.data.total ?? 0),
+      api.get('/donors', { params: { isEligible: false, limit: 1 } }).then((r) => r.data.data.total ?? 0),
+      api.get('/donors', { params: { limit: 500 } }).then((r) =>
+        (r.data.data.data ?? []).reduce((s: number, d: Donor) => s + d.donationCount, 0),
+      ),
+    ]).then(([eligible, ineligible, donations]) => {
+      setSummaryCounts({ eligible, ineligible, donations, total: eligible + ineligible });
+    });
+  };
+
+  useEffect(() => {
+    fetchDonors();
+  }, [page, search, statusFilter]);
+
+  useEffect(() => {
+    fetchSummaryCounts();
+    api.get('/blood-bags/types').then((res) => setBloodTypes(res.data.data ?? []));
   }, []);
 
-  const filtered = donors.filter((d) => {
-    const status = getDonorStatus(d);
-    if (statusFilter !== 'ALL' && status !== statusFilter) return false;
-    const q = search.toLowerCase();
-    if (q && !d.nationalId.toLowerCase().includes(q) && !`${d.firstName} ${d.lastName}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
-
-  const eligible   = donors.filter((d) => d.isEligible).length;
-  const ineligible = donors.length - eligible;
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   const handleRegister = async () => {
     const bt = bloodTypes.find((t) => t.aboGroup === form.aboGroup && t.rhFactor === form.rhFactor);
@@ -82,9 +116,10 @@ export default function DonorsPage() {
         phone:       form.phone || undefined,
         bloodTypeId: bt.id,
       });
-      setDonors((prev) => [res.data.data, ...prev]);
       setShowModal(false);
       setForm({ firstName: '', lastName: '', dob: '', phone: '', nationalId: '', bloodTypeId: '', aboGroup: 'O', rhFactor: 'POSITIVE' });
+      fetchDonors();
+      fetchSummaryCounts();
     } catch (e: any) {
       const msg = e?.response?.data?.message;
       setSubmitError(typeof msg === 'string' ? msg : 'Erreur lors de l\'enregistrement.');
@@ -115,10 +150,10 @@ export default function DonorsPage() {
         {/* Summary */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total donneurs',   value: donors.length, icon: 'group',          color: 'text-secondary' },
-            { label: 'Éligibles',        value: eligible,      icon: 'check_circle',   color: 'text-tertiary' },
-            { label: 'Non éligibles',    value: ineligible,    icon: 'cancel',         color: 'text-primary'  },
-            { label: 'Dons effectués',   value: donors.reduce((s, d) => s + d.donationCount, 0), icon: 'favorite', color: 'text-secondary' },
+            { label: 'Total donneurs',   value: summaryCounts.total,      icon: 'group',        color: 'text-secondary' },
+            { label: 'Éligibles',        value: summaryCounts.eligible,   icon: 'check_circle', color: 'text-tertiary' },
+            { label: 'Non éligibles',    value: summaryCounts.ineligible, icon: 'cancel',        color: 'text-primary'  },
+            { label: 'Dons effectués',   value: summaryCounts.donations,  icon: 'favorite',      color: 'text-secondary' },
           ].map((s) => (
             <div key={s.label} className="bg-surface-container-lowest rounded-2xl p-5 ambient-shadow border border-outline-variant/10 flex items-center gap-4">
               <span className={`material-symbols-outlined text-[28px] ${s.color}`}>{s.icon}</span>
@@ -177,11 +212,11 @@ export default function DonorsPage() {
                       <span className="material-symbols-outlined animate-spin text-[24px] text-on-surface-variant/40">refresh</span>
                     </td>
                   </tr>
-                ) : filtered.length === 0 ? (
+                ) : donors.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-on-surface-variant">Aucun donneur trouvé.</td>
                   </tr>
-                ) : filtered.map((d) => {
+                ) : donors.map((d) => {
                   const status = getDonorStatus(d);
                   return (
                     <tr key={d.id} className="hover:bg-surface-container-low/50 transition-colors">
@@ -210,6 +245,30 @@ export default function DonorsPage() {
               </tbody>
             </table>
           </div>
+
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-outline-variant/10">
+              <p className="text-xs text-on-surface-variant">
+                Page {page} sur {totalPages} · {total} résultat{total > 1 ? 's' : ''}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="text-xs font-bold px-3 py-2 rounded-xl bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
