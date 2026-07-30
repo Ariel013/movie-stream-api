@@ -16,6 +16,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { AuditEntity } from '../../common/decorators/audit.decorator';
+import { FilterReservationsDto } from './dto/filter-reservations.dto';
 
 @ApiTags('reservations')
 @ApiBearerAuth()
@@ -44,12 +45,27 @@ export class ReservationsController {
     return this.service.searchNearbyBlood(dto);
   }
 
+  @Get('network-map')
+  @ApiOperation({
+    summary: 'Nationwide blood-bank overview for the network map (aggregate counts only)',
+    description:
+      'One entry per active blood bank with a registered location: name, address, ' +
+      'coordinates, and available bag counts (total + per blood type). Never exposes ' +
+      'individual bag records — same confidentiality boundary as the search endpoint.',
+  })
+  networkMap() {
+    return this.service.networkMap();
+  }
+
   // ── CRUD ───────────────────────────────────────────────────────────────────
 
   @Get()
   @ApiOperation({ summary: 'List reservations (scoped by role)' })
-  findAll(@CurrentUser() actor: JwtPayload) {
-    return this.service.findAll(actor);
+  findAll(
+    @Query() { page = 1, limit = 10, status, search }: FilterReservationsDto,
+    @CurrentUser() actor: JwtPayload,
+  ) {
+    return this.service.findAll(actor, page, limit, status, search);
   }
 
   @Get(':id')

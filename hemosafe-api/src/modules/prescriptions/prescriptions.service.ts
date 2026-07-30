@@ -14,16 +14,17 @@ export class PrescriptionsService {
     private readonly prescriptionsRepository: PrescriptionsRepository,
   ) {}
 
-  findAll(actor: JwtPayload) {
+  findAll(actor: JwtPayload, page: number, limit: number) {
     if (actor.role === UserRole.BLOOD_BANK) {
       throw new ForbiddenException('Blood banks cannot access prescriptions');
     }
     if (actor.role === UserRole.HOSPITAL) {
-      return this.prescriptionsRepository.findAll({
-        hospitalId: actor.facilityId ?? undefined,
-      });
+      return this.prescriptionsRepository.findAll(
+        { hospitalId: actor.facilityId ?? undefined },
+        page, limit,
+      );
     }
-    return this.prescriptionsRepository.findAll();
+    return this.prescriptionsRepository.findAll(undefined, page, limit);
   }
 
   async findOne(id: string, actor: JwtPayload) {
@@ -84,15 +85,15 @@ export class PrescriptionsService {
     return this.prescriptionsRepository.markFulfilled(id);
   }
 
-  findUnfulfilled(actor: JwtPayload) {
+  findUnfulfilled(actor: JwtPayload, page: number, limit: number) {
     if (actor.role === UserRole.BLOOD_BANK) {
       throw new ForbiddenException('Blood banks cannot access prescriptions');
     }
     if (actor.role === UserRole.HOSPITAL) {
       return this.prescriptionsRepository.findUnfulfilled(
-        actor.facilityId ?? undefined,
+        actor.facilityId ?? undefined, page, limit,
       );
     }
-    return this.prescriptionsRepository.findUnfulfilled();
+    return this.prescriptionsRepository.findUnfulfilled(undefined, page, limit);
   }
 }

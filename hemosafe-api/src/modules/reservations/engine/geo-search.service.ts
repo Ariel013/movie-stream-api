@@ -102,36 +102,79 @@ export class GeoSearchService {
   }
 
   /**
-   * Nationwide blood availability summary — used by the admin dashboard map.
-   * Returns one row per bank per blood type.
+   * Nationwide blood-bank overview for the network map — one row per
+   * (bank, blood type) pair, including banks/types with zero stock (CROSS JOIN +
+   * LEFT JOIN, not INNER JOIN) so a bank never silently disappears from the map
+   * just because it's out of a given type. Only ever exposes aggregate counts,
+   * never individual bag records — same confidentiality boundary as
+   * findNearbyWithStock. Banks without a persisted `location` (see the known
+   * lat/lng-dropped-on-create gap) are excluded — nothing to plot on a map.
    */
-  async nationalAvailabilityMap(): Promise<
+  private async rawNationalOverview(): Promise<
     Array<{
-      bankId:         string;
-      bankName:       string;
-      lat:            number;
-      lng:            number;
-      bloodTypeLabel: string;
-      availableCount: number;
+      bankId:    string;
+      bankName:  string;
+      address:   string;
+      lat:       number;
+      lng:       number;
+      bloodType: string;
+      count:     number;
     }>
   > {
     return this.prisma.$queryRaw`
       SELECT
-        f.id                           AS "bankId",
-        f.name                         AS "bankName",
-        ST_Y(f.location::geometry)     AS lat,
-        ST_X(f.location::geometry)     AS lng,
-        bt.label                       AS "bloodTypeLabel",
-        COUNT(bb.id)::int              AS "availableCount"
+        f.id                                                     AS "bankId",
+        f.name                                                   AS "bankName",
+        f.address                                                AS address,
+        ST_Y(f.location::geometry)                                AS lat,
+        ST_X(f.location::geometry)                                AS lng,
+        bt.label                                                  AS "bloodType",
+        COUNT(bb.id) FILTER (
+          WHERE bb.status = 'AVAILABLE' AND bb.expires_at > NOW()
+        )::int                                                    AS count
       FROM facilities f
-      JOIN blood_bags  bb ON bb.blood_bank_id  = f.id
-      JOIN blood_types bt ON bt.id             = bb.blood_type_id
+      CROSS JOIN blood_types bt
+      LEFT JOIN blood_bags bb
+        ON bb.blood_bank_id = f.id AND bb.blood_type_id = bt.id
       WHERE f.type      = 'BLOOD_BANK'
         AND f.is_active = TRUE
-        AND bb.status   = 'AVAILABLE'
-        AND bb.expires_at > NOW()
-      GROUP BY f.id, f.name, f.location, bt.label
+        AND f.location IS NOT NULL
+      GROUP BY f.id, f.name, f.address, f.location, bt.label
       ORDER BY f.name, bt.label
     `;
+  }
+
+  /** Groups the flat (bank, bloodType) rows into one entry per bank for the map. */
+  async nationalOverview(): Promise<
+    Array<{
+      id:             string;
+      name:           string;
+      address:        string;
+      lat:            number;
+      lng:            number;
+      availableCount: number;
+      stockByType:    Record<string, number>;
+    }>
+  > {
+    const rows = await this.rawNationalOverview();
+    const byBank = new Map<string, {
+      id: string; name: string; address: string; lat: number; lng: number;
+      availableCount: number; stockByType: Record<string, number>;
+    }>();
+
+    for (const row of rows) {
+      let entry = byBank.get(row.bankId);
+      if (!entry) {
+        entry = {
+          id: row.bankId, name: row.bankName, address: row.address,
+          lat: row.lat, lng: row.lng, availableCount: 0, stockByType: {},
+        };
+        byBank.set(row.bankId, entry);
+      }
+      entry.stockByType[row.bloodType] = row.count;
+      entry.availableCount += row.count;
+    }
+
+    return [...byBank.values()];
   }
 }

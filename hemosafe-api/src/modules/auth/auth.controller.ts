@@ -2,6 +2,7 @@ import {
   Controller, Post, Get, Body, UseGuards,
   HttpCode, HttpStatus, Req,
 } from '@nestjs/common';
+import { ExtractJwt } from 'passport-jwt';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
@@ -44,9 +45,10 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Revoke refresh token' })
-  logout(@CurrentUser('sub') userId: string) {
-    return this.authService.logout(userId);
+  @ApiOperation({ summary: 'Revoke refresh token and blacklist the current access token' })
+  logout(@CurrentUser('sub') userId: string, @Req() req: Request) {
+    const accessToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    return this.authService.logout(userId, accessToken ?? undefined);
   }
 
   @Get('me')

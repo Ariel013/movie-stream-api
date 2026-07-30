@@ -134,10 +134,9 @@ export class ReservationValidatorService {
       ReservationStatus.CONFIRMED,
       ReservationStatus.DISPATCHED,
     ]);
-    const hospitalTransitions = new Set<ReservationStatus>([
-      ReservationStatus.DELIVERED,
-      ReservationStatus.CANCELLED,
-    ]);
+    // CANCELLED is intentionally open to both HOSPITAL and BLOOD_BANK — either
+    // side may need to cancel (e.g. the bank can't fulfil the request after all).
+    // Facility ownership is still enforced separately in ReservationsService.assertAccess.
 
     if (bankTransitions.has(to) && actor.role !== 'BLOOD_BANK' && actor.role !== 'ADMIN') {
       throw new ForbiddenException(`Only BLOOD_BANK can set status to ${to}`);

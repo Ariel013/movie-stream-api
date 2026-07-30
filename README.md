@@ -18,8 +18,9 @@
 10. [Déploiement en production](#déploiement-en-production)
 11. [Monitoring & Alertes](#monitoring--alertes)
 12. [Sécurité](#sécurité)
-13. [CI/CD](#cicd)
-14. [Scripts utilitaires](#scripts-utilitaires)
+13. [État actuel & tests](#état-actuel--tests)
+14. [CI/CD](#cicd)
+15. [Scripts utilitaires](#scripts-utilitaires)
 
 ---
 
@@ -36,12 +37,17 @@ HEMOSAFE est une application web Progressive (PWA) destinée à la gestion centr
 
 ### Rôles utilisateurs
 
-| Rôle | Description |
+> ⚠️ **État réel du code** (vérifié 2026-07-27) — seuls 3 rôles sont implémentés :
+> `ADMIN`, `HOSPITAL`, `BLOOD_BANK` (enum `UserRole` dans `schema.prisma`).
+> `BLOOD_BANK_MANAGER`, `HOSPITAL_STAFF` et `DONOR` (compte donneur authentifié) sont
+> la cible produit, pas encore implémentés. Détail de l'écart et du plan de migration
+> dans `CLAUDE.md` §3.
+
+| Rôle (implémenté) | Description |
 |---|---|
-| `ADMIN` | Ministère de la Santé — vue nationale, gestion des utilisateurs |
-| `BLOOD_BANK_MANAGER` | Gestion du stock, validation des réservations entrantes |
-| `HOSPITAL_STAFF` | Recherche de sang, création de réservations |
-| `DONOR` | Consultation de son historique de dons |
+| `ADMIN` | Vue nationale, gestion des utilisateurs et de toutes les banques/hôpitaux |
+| `BLOOD_BANK` | Gestion du stock de sa banque, validation des réservations entrantes, donneurs de sa banque |
+| `HOSPITAL` | Recherche de sang, création de réservations, gestion de ses patients/prescriptions |
 
 ---
 
@@ -268,14 +274,36 @@ docker compose exec api npx prisma migrate dev
 docker compose exec api npx prisma db seed
 ```
 
+> ⚠️ **Piège connu avec `prisma migrate dev`** — la colonne PostGIS
+> `facilities.location` n'est pas déclarée dans `schema.prisma` (Prisma ne gère pas
+> nativement le type `geography`, elle est ajoutée via une migration SQL manuelle,
+> voir `20260525000001_add_facility_location`). Résultat : dès que cette colonne
+> contient des données (après le seed, ou en usage réel), relancer
+> `prisma migrate dev` pour créer une **nouvelle** migration propose de **DROP la
+> colonne `location` et son index GIST**, ce qui détruit la géolocalisation de
+> toutes les banques/hôpitaux. La première exécution (base vide) est sans risque.
+> **Pour toute migration ultérieure : relire le SQL généré avant de valider**, ou
+> utiliser `prisma migrate diff` pour l'inspecter sans l'appliquer.
+
 ### 5. Accéder à l'application
 
 | Service | URL | Identifiants par défaut |
 |---|---|---|
-| Application web | http://localhost:3000 | `admin@hemosafe.dz` / `Admin1234!` |
+| Application web | http://localhost:3000 | voir comptes de test ci-dessous |
 | API NestJS | http://localhost:3001/api | — |
 | Swagger / Docs API | http://localhost:3001/api/docs | — |
 | Prisma Studio | http://localhost:5555 | — |
+
+**Comptes de test créés par `prisma db seed`** (un par rôle implémenté, cf. `hemosafe-api/prisma/seed.ts`) :
+
+| Rôle | Email | Mot de passe | Établissement |
+|---|---|---|---|
+| `ADMIN` | `admin@hemosafe.ci` | `Admin1234!` | — (vue nationale) |
+| `HOSPITAL` | `hopital@hemosafe.ci` | `Hospital1234!` | CHU de Cocody |
+| `BLOOD_BANK` | `banque@hemosafe.ci` | `BloodBank1234!` | Centre National de Transfusion Sanguine (CNTS-ABJ) |
+
+Le seed crée aussi 6 banques de sang, 4 hôpitaux et ~118 poches de sang de démonstration
+répartis sur des villes de Côte d'Ivoire (Abidjan, Bouaké, San-Pédro, Korhogo, Gagnoa).
 
 ```sh
 # Lancer Prisma Studio (interface visuelle BDD)
@@ -339,21 +367,27 @@ POST   /api/v1/auth/logout         Invalider la session
 
 ### Stock sanguin
 ```
-GET    /api/v1/blood-bags          Lister les poches (filtres: groupe, statut, établissement)
-POST   /api/v1/blood-bags          Enregistrer une nouvelle poche
-PATCH  /api/v1/blood-bags/:id      Mettre à jour le statut
-DELETE /api/v1/blood-bags/:id      Retirer une poche (périmée / utilisée)
-GET    /api/v1/blood-bags/search   Recherche géolocalisée par groupe + rayon (km)
+GET    /api/v1/blood-bags                        Lister les poches (filtres: aboGroup, rhFactor, status, bloodBankId)
+GET    /api/v1/blood-bags/types                   Référentiel des groupes sanguins (UUID + label)
+GET    /api/v1/blood-bags/expiring-soon           Poches expirant sous 48h
+GET    /api/v1/blood-bags/stock-summary/:bankId   Résumé du stock disponible par groupe (mis en cache 3 min)
+GET    /api/v1/blood-bags/:id                     Détail d'une poche + historique des mouvements
+POST   /api/v1/blood-bags                         Enregistrer une nouvelle poche (BLOOD_BANK / ADMIN)
+PATCH  /api/v1/blood-bags/:id/discard             Retirer une poche (raison obligatoire, min 10 caractères)
 ```
+> Pas de recherche géolocalisée sous `/blood-bags` — elle vit sous `/reservations/search`
+> (voir ci-dessous), avec verrouillage de stock si utilisée pour réserver.
 
 ### Réservations
 ```
-POST   /api/v1/reservations        Créer une réservation
-GET    /api/v1/reservations        Lister (filtre par statut, établissement)
-PATCH  /api/v1/reservations/:id/confirm    Confirmer (banque de sang)
-PATCH  /api/v1/reservations/:id/dispatch   Marquer comme expédiée
-PATCH  /api/v1/reservations/:id/deliver    Marquer comme livrée
-DELETE /api/v1/reservations/:id/cancel     Annuler
+POST   /api/v1/reservations              Créer une réservation (alloue les poches FEFO sous verrou)
+GET    /api/v1/reservations              Lister (scoping automatique par établissement)
+GET    /api/v1/reservations/:id          Détail
+POST   /api/v1/reservations/search       Recherche géolocalisée de banques avec stock (lat, lng, radiusKm, bloodTypeId)
+PATCH  /api/v1/reservations/:id/status   Transition FSM unique — body { status, cancelReason? }
+                                          PENDING→CONFIRMED→DISPATCHED→DELIVERED, ou CANCELLED depuis PENDING/CONFIRMED
+                                          (CONFIRMED/DISPATCHED: BLOOD_BANK — DELIVERED: HOSPITAL — CANCELLED: les deux)
+POST   /api/v1/reservations/:id/verify-bag   Vérifier un code-barres de poche au retrait
 ```
 
 ### Synchronisation hors-ligne
@@ -517,6 +551,43 @@ Les alertes critiques sont routées vers **Slack #hemosafe-critical** et **email
 # Lancer le check complet avant un déploiement
 ./scripts/security-check.sh .env.prod
 ```
+
+---
+
+## État actuel & tests
+
+> Section à tenir à jour à chaque campagne de test — voir aussi `CLAUDE.md` §8 pour
+> l'historique détaillé des corrections.
+
+### Tests automatisés
+
+**Aucun test automatisé n'existe actuellement** (`hemosafe-api/test/` est vide,
+aucun `*.spec.ts` dans `src/`), bien que `.github/workflows/ci.yml` définisse un job
+`test-api` qui exécute Jest contre une vraie PostgreSQL + Redis. À écrire en priorité
+sur les modules critiques : `reservations/engine` (FSM + allocation FEFO), `auth`,
+`sync`.
+
+### Dernière vérification fonctionnelle manuelle (2026-07-27)
+
+Passe de correction de bugs suivie d'une vérification par appels API réels (curl,
+instance dédiée, pas seulement compilation) sur les 3 rôles :
+
+| Module | Vérifié | Non couvert |
+|---|---|---|
+| Auth (login/refresh/me) | ✅ 3 rôles | logout, expiration de token |
+| Réservations (FSM complet) | ✅ création, transitions, rôles, rejets | expiration automatique (cron), verify-bag |
+| Blood bags | ✅ création, discard, filtres, cache stock-summary | expiring-soon en réel, cron d'expiration |
+| Donors | ✅ RBAC, IDOR inter-banques, screening | — |
+| Patients | ✅ RBAC, IDOR inter-hôpitaux | — |
+| Prescriptions | Relecture de code uniquement | Aucun appel réel |
+| Transfers | ✅ création, FSM, crash HOSPITAL corrigé | IN_TRANSIT→RECEIVED, cancel |
+| Sync offline (`/sync/batch`, `/sync/pull`) | ✅ allocation réelle, anti-usurpation, idempotence, notifications | endpoints `blood-bags`/`patients` du dispatch (seul `reservations` testé en direct) |
+| Users | ✅ anti-escalade de privilège | — |
+| Notifications | ✅ listeners banque (implémentés cette session) | WebSocket temps réel |
+| Statistics | Relecture de code + cache vérifié sur `stock-summary` uniquement | `national`, `regional`, `donors`, `reservation-trends` |
+| Hospitals/Blood-banks (`nearby`) | Non testé | Recherche géospatiale |
+| Audit-logs, Health/Metrics | Non testé en direct | — |
+| **Frontend (navigateur)** | **Non testé** | Toute l'interface — seule l'API a été appelée directement |
 
 ---
 

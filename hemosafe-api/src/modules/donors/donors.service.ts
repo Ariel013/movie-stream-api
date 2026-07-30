@@ -17,16 +17,23 @@ export class DonorsService {
     private readonly prisma: PrismaService,
   ) {}
 
-  findAll(actor: JwtPayload) {
-    if (actor.role === UserRole.BLOOD_BANK) {
-      return this.donorsRepository.findAll({
-        registeredBankId: actor.facilityId ?? undefined,
-      });
+  findAll(actor: JwtPayload, page: number, limit: number, search?: string, isEligible?: boolean) {
+    if (actor.role === UserRole.HOSPITAL) {
+      throw new ForbiddenException('Hospitals do not have access to the donor directory');
     }
-    return this.donorsRepository.findAll();
+    if (actor.role === UserRole.BLOOD_BANK) {
+      return this.donorsRepository.findAll(
+        { registeredBankId: actor.facilityId ?? undefined },
+        page, limit, search, isEligible,
+      );
+    }
+    return this.donorsRepository.findAll(undefined, page, limit, search, isEligible);
   }
 
   async findOne(id: string, actor: JwtPayload) {
+    if (actor.role === UserRole.HOSPITAL) {
+      throw new ForbiddenException('Hospitals do not have access to the donor directory');
+    }
     const donor = await this.donorsRepository.findById(id);
     if (!donor) {
       throw new NotFoundException(`Donor ${id} not found`);
@@ -58,7 +65,22 @@ export class DonorsService {
     });
   }
 
-  update(id: string, dto: Partial<CreateDonorDto>, actor: JwtPayload) {
+  async update(id: string, dto: Partial<CreateDonorDto>, actor: JwtPayload) {
+    if (actor.role === UserRole.HOSPITAL) {
+      throw new ForbiddenException('Hospitals cannot update donors');
+    }
+
+    const donor = await this.donorsRepository.findById(id);
+    if (!donor) {
+      throw new NotFoundException(`Donor ${id} not found`);
+    }
+    if (
+      actor.role === UserRole.BLOOD_BANK &&
+      donor.registeredBankId !== actor.facilityId
+    ) {
+      throw new ForbiddenException('Access denied to this donor');
+    }
+
     return this.donorsRepository.update(id, {
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -75,6 +97,17 @@ export class DonorsService {
   }
 
   async createScreening(dto: CreateScreeningDto, actor: JwtPayload) {
+    const donor = await this.donorsRepository.findById(dto.donorId);
+    if (!donor) {
+      throw new NotFoundException(`Donor ${dto.donorId} not found`);
+    }
+    if (
+      actor.role === UserRole.BLOOD_BANK &&
+      donor.registeredBankId !== actor.facilityId
+    ) {
+      throw new ForbiddenException('Access denied to this donor');
+    }
+
     const screening = await this.prisma.healthScreening.create({
       data: {
         donor: { connect: { id: dto.donorId } },

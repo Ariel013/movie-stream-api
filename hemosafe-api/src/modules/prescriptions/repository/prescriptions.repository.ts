@@ -6,8 +6,18 @@ import { PrismaService } from '../../../prisma/prisma.service';
 export class PrescriptionsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(where?: Prisma.PrescriptionWhereInput) {
-    return this.prisma.prescription.findMany({ where });
+  async findAll(where: Prisma.PrescriptionWhereInput | undefined, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.prescription.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.prescription.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {
@@ -38,13 +48,21 @@ export class PrescriptionsRepository {
     });
   }
 
-  findUnfulfilled(hospitalId?: string) {
-    return this.prisma.prescription.findMany({
-      where: {
-        isFulfilled: false,
-        ...(hospitalId ? { hospitalId } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findUnfulfilled(hospitalId: string | undefined, page: number, limit: number) {
+    const where: Prisma.PrescriptionWhereInput = {
+      isFulfilled: false,
+      ...(hospitalId ? { hospitalId } : {}),
+    };
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.prescription.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.prescription.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 }

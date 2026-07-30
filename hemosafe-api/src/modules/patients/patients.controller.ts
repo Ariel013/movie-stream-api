@@ -4,8 +4,10 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -14,6 +16,7 @@ import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.de
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { FilterPatientsDto } from './dto/filter-patients.dto';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { PatientsService } from './patients.service';
 
@@ -26,12 +29,15 @@ export class PatientsController {
 
   @Get()
   @Roles(UserRole.HOSPITAL, UserRole.ADMIN)
-  findAll(@CurrentUser() actor: JwtPayload) {
-    return this.patientsService.findAll(actor);
+  findAll(
+    @Query() { page = 1, limit = 10, search, isActive }: FilterPatientsDto,
+    @CurrentUser() actor: JwtPayload,
+  ) {
+    return this.patientsService.findAll(actor, page, limit, search, isActive);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() actor: JwtPayload) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtPayload) {
     return this.patientsService.findOne(id, actor);
   }
 
@@ -43,7 +49,7 @@ export class PatientsController {
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: Partial<CreatePatientDto>,
     @CurrentUser() actor: JwtPayload,
   ) {
@@ -51,7 +57,7 @@ export class PatientsController {
   }
 
   @Delete(':id')
-  deactivate(@Param('id') id: string, @CurrentUser() actor: JwtPayload) {
+  deactivate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtPayload) {
     return this.patientsService.deactivate(id, actor);
   }
 }

@@ -3,15 +3,19 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { HospitalsRepository } from './repository/hospitals.repository';
+import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateHospitalDto } from './dto/create-hospital.dto';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class HospitalsService {
-  constructor(private readonly repo: HospitalsRepository) {}
+  constructor(
+    private readonly repo: HospitalsRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  findAll(regionId?: string) {
-    return this.repo.findAll(regionId);
+  findAll(regionId: string | undefined, page: number, limit: number) {
+    return this.repo.findAll(regionId, page, limit);
   }
 
   async findOne(id: string) {
@@ -25,7 +29,7 @@ export class HospitalsService {
       throw new ForbiddenException('Only ADMIN can create hospitals');
     }
 
-    return this.repo.create({
+    const hospital = await this.repo.create({
       name:    dto.name,
       code:    dto.code,
       address: dto.address,
@@ -33,6 +37,12 @@ export class HospitalsService {
       email:   dto.email,
       region:  { connect: { id: dto.regionId } },
     });
+
+    if (dto.lat !== undefined && dto.lng !== undefined) {
+      await this.setLocation(hospital.id, dto.lat, dto.lng);
+    }
+
+    return hospital;
   }
 
   async update(id: string, dto: Partial<CreateHospitalDto>, actor: JwtPayload) {
@@ -49,7 +59,26 @@ export class HospitalsService {
     if (dto.email   !== undefined) data['email']   = dto.email;
     if (dto.regionId !== undefined) data['region'] = { connect: { id: dto.regionId } };
 
-    return this.repo.update(id, data as any);
+    const hospital = await this.repo.update(id, data as any);
+
+    if (dto.lat !== undefined && dto.lng !== undefined) {
+      await this.setLocation(id, dto.lat, dto.lng);
+    }
+
+    return hospital;
+  }
+
+  /**
+   * Persists the PostGIS `location` column — not a Prisma-modeled field (see
+   * schema.prisma comment on Facility), so it's written via raw SQL, same
+   * pattern as prisma/seed.ts.
+   */
+  private setLocation(id: string, lat: number, lng: number) {
+    return this.prisma.$executeRaw`
+      UPDATE facilities
+      SET location = ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography
+      WHERE id = ${id}::uuid
+    `;
   }
 
   nearby(lat: number, lng: number, radiusKm: number) {

@@ -264,6 +264,10 @@ model BloodBag {
   stockMovements StockMovement[]
   transferBags   TransferBag[]
 
+  @@index([bloodBankId, status, expiresAt])
+  @@index([bloodTypeId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@index([donorId])
   @@map("blood_bags")
 }
 
@@ -284,6 +288,7 @@ model Patient {
   bloodType     BloodType?    @relation(fields: [bloodTypeId], references: [id])
   prescriptions Prescription[]
 
+  @@index([hospitalId])
   @@map("patients")
 }
 
@@ -338,6 +343,9 @@ model Reservation {
   reservationBags ReservationBag[]
   stockMovements StockMovement[]
 
+  @@index([status, expiresAt])
+  @@index([hospitalId])
+  @@index([bloodBankId])
   @@map("reservations")
 }
 
@@ -370,6 +378,7 @@ model StockMovement {
   reservation Reservation? @relation(fields: [reservationId], references: [id])
   transfer    Transfer?    @relation(fields: [transferId], references: [id])
 
+  @@index([bloodBagId, createdAt])
   @@map("stock_movements")
 }
 
@@ -421,6 +430,7 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
@@ -439,6 +449,7 @@ model AuditLog {
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([createdAt])
   @@map("audit_logs")
 }
 

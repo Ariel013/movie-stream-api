@@ -22,12 +22,19 @@ const TRANSFER_INCLUDE = {
 export class TransfersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(where: Prisma.TransferWhereInput) {
-    return this.prisma.transfer.findMany({
-      where,
-      include: TRANSFER_INCLUDE,
-      orderBy: { initiatedAt: 'desc' },
-    });
+  async findAll(where: Prisma.TransferWhereInput, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.transfer.findMany({
+        where,
+        include: TRANSFER_INCLUDE,
+        orderBy: [{ initiatedAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.transfer.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {

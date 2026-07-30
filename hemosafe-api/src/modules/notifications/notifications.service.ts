@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, UserRole } from '@prisma/client';
 import { NotificationsRepository } from './repository/notifications.repository';
+import { PrismaService } from '../../prisma/prisma.service';
 import type { FilterNotificationsDto } from './dto/filter-notifications.dto';
 import type { CreateNotificationDto } from './dto/create-notification.dto';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -10,7 +11,10 @@ import type { JwtPayload } from '../../common/decorators/current-user.decorator'
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly repo: NotificationsRepository) {}
+  constructor(
+    private readonly repo: NotificationsRepository,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
@@ -63,13 +67,17 @@ export class NotificationsService {
   // ── Event listeners ────────────────────────────────────────────────────────
 
   @OnEvent('reservation.created')
-  async onReservationCreated(payload: { bloodBankId: string; code: string }) {
-    // Notify blood bank staff — in a real app you'd look up all bank users
-    // Here we record on the facility's user list; simplest approach: emit per user
-    // This event payload comes from ReservationsService which emits the reservation object
-    this.logger.debug(`[event] reservation.created → code=${(payload as any).code}`);
-    // Notification creation handled at the bank level by querying users (omitted here to
-    // avoid circular imports; the controller layer or a dedicated listener module wires this)
+  async onReservationCreated(payload: {
+    id: string; code: string; quantity: number;
+    hospital: { name: string }; bloodBank: { id: string };
+  }) {
+    this.logger.debug(`[event] reservation.created → code=${payload.code}`);
+    await this.notifyBankStaff(payload.bloodBank.id, {
+      type:  NotificationType.SYSTEM,
+      title: 'New reservation request',
+      body:  `${payload.hospital.name} requested ${payload.quantity} bag(s) — reservation ${payload.code}.`,
+      metadata: { reservationId: payload.id },
+    });
   }
 
   @OnEvent('reservation.confirmed')
@@ -103,14 +111,51 @@ export class NotificationsService {
   }
 
   @OnEvent('reservation.delivered')
-  async onReservationDelivered(payload: { id: string; code: string; bloodBankId: string }) {
-    this.logger.debug(`[event] reservation.delivered → code=${(payload as any).code}`);
-    // Notify blood bank — in production, resolve blood bank manager user IDs here
+  async onReservationDelivered(payload: {
+    id: string; code: string; bloodBank: { id: string };
+  }) {
+    this.logger.debug(`[event] reservation.delivered → code=${payload.code}`);
+    await this.notifyBankStaff(payload.bloodBank.id, {
+      type:  NotificationType.SYSTEM,
+      title: 'Reservation delivered',
+      body:  `Reservation ${payload.code} was picked up by the hospital.`,
+      metadata: { reservationId: payload.id },
+    });
   }
 
   @OnEvent('bags.expiring-soon')
-  async onBagsExpiringSoon(payload: Array<{ bloodBankId: string; id: string }>) {
+  async onBagsExpiringSoon(payload: Array<{ id: string; code: string; bloodBankId: string }>) {
     this.logger.debug(`[event] bags.expiring-soon → ${payload.length} bag(s)`);
-    // In production: group by bloodBankId and notify each bank's staff users
+
+    const byBank = new Map<string, Array<{ id: string; code: string }>>();
+    for (const bag of payload) {
+      const list = byBank.get(bag.bloodBankId) ?? [];
+      list.push({ id: bag.id, code: bag.code });
+      byBank.set(bag.bloodBankId, list);
+    }
+
+    for (const [bloodBankId, bags] of byBank) {
+      await this.notifyBankStaff(bloodBankId, {
+        type:  NotificationType.BAG_EXPIRING_SOON,
+        title: `${bags.length} bag(s) expiring within 48h`,
+        body:  `Codes: ${bags.map((b) => b.code).join(', ')}`,
+        metadata: { bagIds: bags.map((b) => b.id) },
+      });
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  private async notifyBankStaff(
+    bloodBankId: string,
+    payload: Omit<CreateNotificationDto, 'userId'>,
+  ) {
+    const staff = await this.prisma.user.findMany({
+      where:  { facilityId: bloodBankId, role: UserRole.BLOOD_BANK, isActive: true },
+      select: { id: true },
+    });
+    await Promise.all(
+      staff.map((u) => this.createForUser({ ...payload, userId: u.id })),
+    );
   }
 }

@@ -42,7 +42,7 @@ export class SyncController {
     @Body() dto: BatchSyncDto,
     @CurrentUser() actor: JwtPayload,
   ) {
-    const results = await this.syncService.processBatch(dto, actor.sub);
+    const results = await this.syncService.processBatch(dto, actor);
     return { results };
   }
 
@@ -63,7 +63,7 @@ export class SyncController {
     const since  = sinceStr ? new Date(sinceStr) : null;
     const scopes = scopesStr ? scopesStr.split(',') : ['stock', 'reservations', 'patients', 'notifications'];
 
-    const data = await this.syncService.pull(since, scopes, actor.facilityId ?? actor.sub);
+    const data = await this.syncService.pull(since, scopes, actor.facilityId ?? actor.sub, actor.sub);
     return { data };
   }
 }

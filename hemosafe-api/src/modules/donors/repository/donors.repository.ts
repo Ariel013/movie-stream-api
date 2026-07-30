@@ -6,12 +6,36 @@ import { PrismaService } from '../../../prisma/prisma.service';
 export class DonorsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(where?: Prisma.DonorWhereInput) {
-    return this.prisma.donor.findMany({
-      where,
-      include: { bloodType: { select: { label: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    where: Prisma.DonorWhereInput | undefined,
+    page: number,
+    limit: number,
+    search?: string,
+    isEligible?: boolean,
+  ) {
+    const finalWhere: Prisma.DonorWhereInput = {
+      ...where,
+      ...(isEligible !== undefined && { isEligible }),
+      ...(search && {
+        OR: [
+          { nationalId: { contains: search, mode: 'insensitive' } },
+          { firstName:  { contains: search, mode: 'insensitive' } },
+          { lastName:   { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.donor.findMany({
+        where: finalWhere,
+        include: { bloodType: { select: { label: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.donor.count({ where: finalWhere }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {

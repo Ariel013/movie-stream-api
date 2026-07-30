@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, ParseUUIDPipe, UseGuards,
+  Body, Param, ParseUUIDPipe, UseGuards, Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -21,8 +22,8 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'List users (scoped to facility for non-ADMIN)' })
-  findAll(@CurrentUser() actor: JwtPayload) {
-    return this.usersService.findAll(actor);
+  findAll(@Query() { page = 1, limit = 10 }: PaginationQueryDto, @CurrentUser() actor: JwtPayload) {
+    return this.usersService.findAll(actor, page, limit);
   }
 
   @Get(':id')
@@ -53,11 +54,13 @@ export class UsersController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Deactivate a user (ADMIN only)' })
-  deactivate(
+  @ApiOperation({
+    summary: 'Toggle a user\'s active status (ADMIN only) — deactivates an active account, reactivates an inactive one',
+  })
+  toggleActive(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: JwtPayload,
   ) {
-    return this.usersService.deactivate(id, actor);
+    return this.usersService.toggleActive(id, actor);
   }
 }

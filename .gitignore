@@ -27,3 +27,18 @@ TestResults.xml
 node_modules/
 ./hemosafe-api/node_modules/
 ./hemosafe-web/node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment files (never commit real secrets/config)
+.env
+.env.dev
+.env.prod
+.env.local
+!.env.example
+
+# Misc
+*.tsbuildinfo
+dist/

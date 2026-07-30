@@ -1,11 +1,12 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, Logger,
+  Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ReservationStatus, UserRole } from '@prisma/client';
 import { ReservationEngineService } from './engine/reservation-engine.service';
 import { GeoSearchService } from './engine/geo-search.service';
 import { ReservationsRepository } from './repository/reservations.repository';
+import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateReservationDto } from './dto/create-reservation.dto';
 import type { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import type { SearchBloodDto } from './dto/search-blood.dto';
@@ -33,6 +34,7 @@ export class ReservationsService {
     private readonly engine: ReservationEngineService,
     private readonly geoSearch: GeoSearchService,
     private readonly repo: ReservationsRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -47,10 +49,15 @@ export class ReservationsService {
     );
   }
 
+  /** Nationwide blood-bank overview for the network map — aggregate counts only. */
+  networkMap() {
+    return this.geoSearch.nationalOverview();
+  }
+
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  findAll(actor: JwtPayload) {
-    return this.repo.findAll(this.scopeWhere(actor));
+  findAll(actor: JwtPayload, page: number, limit: number, status?: ReservationStatus, search?: string) {
+    return this.repo.findAll(this.scopeWhere(actor), page, limit, status, search);
   }
 
   async findOne(id: string, actor: JwtPayload) {
@@ -62,7 +69,7 @@ export class ReservationsService {
 
   // ── Create ─────────────────────────────────────────────────────────────────
 
-  create(dto: CreateReservationDto, actor: JwtPayload) {
+  async create(dto: CreateReservationDto, actor: JwtPayload) {
     if (actor.role === UserRole.BLOOD_BANK) {
       throw new ForbiddenException('Blood banks cannot create reservations');
     }
@@ -73,6 +80,21 @@ export class ReservationsService {
 
     if (!hospitalId) {
       throw new ForbiddenException('hospitalId is required for ADMIN');
+    }
+
+    // aboGroup / rhFactor live on BloodType, not on the reservation itself —
+    // cross-check against bloodTypeId so a caller can't request a mismatched pair.
+    const bloodType = await this.prisma.bloodType.findUnique({
+      where: { id: dto.bloodTypeId },
+      select: { aboGroup: true, rhFactor: true },
+    });
+    if (!bloodType) {
+      throw new NotFoundException(`Blood type ${dto.bloodTypeId} not found`);
+    }
+    if (bloodType.aboGroup !== dto.aboGroup || bloodType.rhFactor !== dto.rhFactor) {
+      throw new BadRequestException(
+        `aboGroup/rhFactor (${dto.aboGroup}${dto.rhFactor}) does not match bloodTypeId`,
+      );
     }
 
     return this.engine.allocate({

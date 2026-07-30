@@ -3,17 +3,29 @@ import {
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class StatisticsService {
   private readonly logger = new Logger(StatisticsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  // Dashboard aggregates — a few minutes of staleness is fine, and it's what
+  // was agreed for these read-only, non-transactional endpoints.
+  private static readonly TTL_SECONDS = 180;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ── National summary ───────────────────────────────────────────────────────
 
-  async nationalSummary() {
+  nationalSummary() {
+    return this.cache.getOrSet('stats:national', StatisticsService.TTL_SECONDS, () => this._nationalSummary());
+  }
+
+  private async _nationalSummary() {
     const [
       bagsByStatus,
       totalDonors,
@@ -48,7 +60,15 @@ export class StatisticsService {
 
   // ── Regional summary ───────────────────────────────────────────────────────
 
-  async regionalSummary(regionId: string) {
+  regionalSummary(regionId: string) {
+    return this.cache.getOrSet(
+      `stats:regional:${regionId}`,
+      StatisticsService.TTL_SECONDS,
+      () => this._regionalSummary(regionId),
+    );
+  }
+
+  private async _regionalSummary(regionId: string) {
     const facilityIds = await this._facilityIdsInRegion(regionId);
 
     const [
@@ -88,7 +108,7 @@ export class StatisticsService {
 
   // ── Facility stock ─────────────────────────────────────────────────────────
 
-  async facilityStock(facilityId: string, actor: JwtPayload) {
+  facilityStock(facilityId: string, actor: JwtPayload) {
     if (
       actor.role === UserRole.BLOOD_BANK &&
       actor.facilityId !== facilityId
@@ -99,6 +119,16 @@ export class StatisticsService {
       throw new ForbiddenException('Hospitals cannot access facility stock details');
     }
 
+    // Access check happens before the cache lookup so a denied actor never
+    // reaches (or seeds) another facility's cached data.
+    return this.cache.getOrSet(
+      `stats:facility-stock:${facilityId}`,
+      StatisticsService.TTL_SECONDS,
+      () => this._facilityStock(facilityId),
+    );
+  }
+
+  private async _facilityStock(facilityId: string) {
     const bagsByBloodType = await this._bagsByBloodType({ bloodBankId: facilityId });
     const totals = await this.prisma.bloodBag.groupBy({
       by:     ['status'],
@@ -115,7 +145,11 @@ export class StatisticsService {
 
   // ── Donor stats ────────────────────────────────────────────────────────────
 
-  async donorStats() {
+  donorStats() {
+    return this.cache.getOrSet('stats:donors', StatisticsService.TTL_SECONDS, () => this._donorStats());
+  }
+
+  private async _donorStats() {
     // Top donors by donation count
     const topDonors = await this.prisma.donor.findMany({
       orderBy: { donationCount: 'desc' },
@@ -157,7 +191,15 @@ export class StatisticsService {
 
   // ── Reservation trends ─────────────────────────────────────────────────────
 
-  async reservationTrends(days: number = 30) {
+  reservationTrends(days: number = 30) {
+    return this.cache.getOrSet(
+      `stats:reservation-trends:${days}`,
+      StatisticsService.TTL_SECONDS,
+      () => this._reservationTrends(days),
+    );
+  }
+
+  private async _reservationTrends(days: number = 30) {
     const since = new Date();
     since.setDate(since.getDate() - days);
 

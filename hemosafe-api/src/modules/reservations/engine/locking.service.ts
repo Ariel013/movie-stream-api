@@ -47,8 +47,14 @@ export class LockingService {
     const key = this.computeKey(bloodBankId, bloodTypeId);
     this.logger.debug(`Acquiring advisory lock key=${key} bank=${bloodBankId} type=${bloodTypeId}`);
 
-    // pg_advisory_xact_lock: blocks until lock is available within this transaction
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${key}::bigint)`;
+    // pg_advisory_xact_lock returns void — must use $executeRaw, $queryRaw cannot
+    // deserialize a void column. hashtext() turns the composite key into the
+    // int4/bigint the advisory lock API expects.
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(
+        hashtext(${bloodBankId} || ':' || ${bloodTypeId})::bigint
+      )
+    `;
   }
 
   /**
@@ -60,9 +66,10 @@ export class LockingService {
     bloodBankId: string,
     bloodTypeId: string,
   ): Promise<boolean> {
-    const key = this.computeKey(bloodBankId, bloodTypeId);
     const rows = await tx.$queryRaw<[{ acquired: boolean }]>`
-      SELECT pg_try_advisory_xact_lock(${key}::bigint) AS acquired
+      SELECT pg_try_advisory_xact_lock(
+        hashtext(${bloodBankId} || ':' || ${bloodTypeId})::bigint
+      ) AS acquired
     `;
     return rows[0].acquired;
   }
@@ -81,7 +88,9 @@ export class LockingService {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const rows = await this.prisma.$queryRaw<[{ acquired: boolean }]>`
-        SELECT pg_try_advisory_xact_lock(${key}::bigint) AS acquired
+        SELECT pg_try_advisory_xact_lock(
+          hashtext(${bloodBankId} || ':' || ${bloodTypeId})::bigint
+        ) AS acquired
       `;
       if (rows[0].acquired) {
         return async () => {

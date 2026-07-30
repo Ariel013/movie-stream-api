@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { FacilityType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
+// No `users` here on purpose — the staff directory of another facility is not
+// public information; ADMIN can look it up via the properly-scoped GET /users.
 const BLOOD_BANK_INCLUDE = {
   region: { select: { id: true, name: true, code: true } },
-  users:  { select: { id: true, email: true, role: true, firstName: true, lastName: true } },
 } satisfies Prisma.FacilityInclude;
 
 export interface StockSummaryRow {
@@ -17,15 +18,23 @@ export interface StockSummaryRow {
 export class BloodBanksRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(regionId?: string) {
-    return this.prisma.facility.findMany({
-      where: {
-        type: FacilityType.BLOOD_BANK,
-        ...(regionId && { regionId }),
-      },
-      include: BLOOD_BANK_INCLUDE,
-      orderBy: { name: 'asc' },
-    });
+  async findAll(regionId: string | undefined, page: number, limit: number) {
+    const where: Prisma.FacilityWhereInput = {
+      type: FacilityType.BLOOD_BANK,
+      ...(regionId && { regionId }),
+    };
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.facility.findMany({
+        where,
+        include: BLOOD_BANK_INCLUDE,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.facility.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {

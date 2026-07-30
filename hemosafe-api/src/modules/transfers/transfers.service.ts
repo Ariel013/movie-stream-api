@@ -33,9 +33,12 @@ export class TransfersService {
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  findAll(actor: JwtPayload) {
+  findAll(actor: JwtPayload, page: number, limit: number) {
+    // Hospitals are not part of the transfer domain — short-circuit before
+    // Prisma sees a filter (avoids passing a non-UUID sentinel to a Uuid column).
+    if (actor.role === UserRole.HOSPITAL) return { data: [], total: 0, page, limit };
     const where = this.buildWhere(actor);
-    return this.repo.findAll(where);
+    return this.repo.findAll(where, page, limit);
   }
 
   async findOne(id: string, actor: JwtPayload) {
@@ -62,6 +65,14 @@ export class TransfersService {
 
     if (fromBankId === dto.toBankId) {
       throw new BadRequestException('Source and destination blood banks must differ');
+    }
+
+    const toBank = await this.prisma.facility.findFirst({
+      where: { id: dto.toBankId, type: 'BLOOD_BANK', isActive: true },
+      select: { id: true },
+    });
+    if (!toBank) {
+      throw new BadRequestException(`Destination blood bank ${dto.toBankId} not found or inactive`);
     }
 
     return this.prisma.transaction(async (tx) => {
@@ -273,16 +284,13 @@ export class TransfersService {
 
   private buildWhere(actor: JwtPayload) {
     if (actor.role === UserRole.ADMIN) return {};
-    if (actor.role === UserRole.BLOOD_BANK) {
-      return {
-        OR: [
-          { fromBankId: actor.facilityId! },
-          { toBankId:   actor.facilityId! },
-        ],
-      };
-    }
-    // HOSPITAL has no transfers but we scope to empty result rather than 403
-    return { id: 'none' };
+    // Only ADMIN and BLOOD_BANK reach this point (HOSPITAL short-circuits in findAll).
+    return {
+      OR: [
+        { fromBankId: actor.facilityId! },
+        { toBankId:   actor.facilityId! },
+      ],
+    };
   }
 
   private assertAccess(

@@ -91,7 +91,7 @@ export class ReservationEngineService {
          * PostgreSQL hashtext() turns the composite key into a deterministic
          * int4 value. We cast to bigint for the advisory lock API.
          */
-        await tx.$queryRaw`
+        await tx.$executeRaw`
           SELECT pg_advisory_xact_lock(
             hashtext(${bloodBankId} || ':' || ${bloodTypeId})::bigint
           )

@@ -6,6 +6,8 @@ export interface JwtPayload {
   email:      string;
   role:       UserRole;
   facilityId: string | null;
+  iat?:       number;    // issued-at (present on decoded tokens, absent when signing)
+  exp?:       number;    // expiry (present on decoded tokens, absent when signing)
 }
 
 /** Extracts the authenticated user payload from the JWT. */

@@ -14,12 +14,35 @@ const RESERVATION_INCLUDE = {
 export class ReservationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(where: Prisma.ReservationWhereInput) {
-    return this.prisma.reservation.findMany({
-      where,
-      include: RESERVATION_INCLUDE,
-      orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }],
-    });
+  async findAll(
+    where: Prisma.ReservationWhereInput,
+    page: number,
+    limit: number,
+    status?: ReservationStatus,
+    search?: string,
+  ) {
+    const finalWhere: Prisma.ReservationWhereInput = {
+      ...where,
+      ...(status && { status }),
+      ...(search && {
+        OR: [
+          { code: { contains: search, mode: 'insensitive' } },
+          { hospital: { name: { contains: search, mode: 'insensitive' } } },
+        ],
+      }),
+    };
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.reservation.findMany({
+        where: finalWhere,
+        include: RESERVATION_INCLUDE,
+        orderBy: [{ urgency: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.reservation.count({ where: finalWhere }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {

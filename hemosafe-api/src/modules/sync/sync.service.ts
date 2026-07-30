@@ -1,8 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BatchSyncDto, SyncOperationDto } from './dto/batch-sync.dto';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import type { Redis } from 'ioredis';
+import { ReservationsService } from '../reservations/reservations.service';
+import { BloodBagsService } from '../blood-bags/blood-bags.service';
+import { PatientsService } from '../patients/patients.service';
+import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
 export interface OperationResult {
   operationId: string;
@@ -29,6 +33,9 @@ export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectRedis() private readonly redis: Redis,
+    private readonly reservationsService: ReservationsService,
+    private readonly bloodBagsService: BloodBagsService,
+    private readonly patientsService: PatientsService,
   ) {}
 
   /**
@@ -37,18 +44,18 @@ export class SyncService {
    * Returns per-operation results so the client can selectively delete
    * from its local sync queue.
    */
-  async processBatch(dto: BatchSyncDto, actorId: string): Promise<OperationResult[]> {
+  async processBatch(dto: BatchSyncDto, actor: JwtPayload): Promise<OperationResult[]> {
     const results: OperationResult[] = [];
 
     for (const op of dto.operations) {
-      const result = await this.processOne(op, actorId);
+      const result = await this.processOne(op, actor);
       results.push(result);
     }
 
     return results;
   }
 
-  private async processOne(op: SyncOperationDto, actorId: string): Promise<OperationResult> {
+  private async processOne(op: SyncOperationDto, actor: JwtPayload): Promise<OperationResult> {
     const redisKey = `${this.IDEM_PREFIX}${op.operationId}`;
 
     // Idempotency check
@@ -58,15 +65,17 @@ export class SyncService {
     }
 
     try {
-      const data = await this.dispatch(op, actorId);
+      const data = await this.dispatch(op, actor);
 
       // Cache the result for 24h
       await this.redis.set(redisKey, JSON.stringify(data), 'EX', this.IDEM_TTL);
 
       return { operationId: op.operationId, status: 'applied', data };
     } catch (err: unknown) {
-      const code = (err as { status?: number })?.status ?? 500;
-      const msg  = (err as Error)?.message ?? 'Unknown error';
+      const code = err instanceof HttpException
+        ? err.getStatus()
+        : (err as { status?: number })?.status ?? 500;
+      const msg = (err as Error)?.message ?? 'Unknown error';
 
       // 409 Conflict — client needs to pull the latest state
       if (code === 409) {
@@ -79,32 +88,39 @@ export class SyncService {
   }
 
   /**
-   * Routes the operation to the correct Prisma action based on
-   * the endpoint + method. Handles the three offline-capable entities:
-   * reservations, blood_bags, patients.
+   * Routes the operation to the correct service based on the endpoint + method,
+   * exactly like the equivalent online HTTP endpoint would. This is deliberate:
+   * offline-queued mutations must go through the same RBAC, facility-scoping,
+   * and business validation (stock locking, FEFO allocation, etc.) as the live
+   * API — no shortcuts, since these write the same medical/stock data.
    */
-  private async dispatch(op: SyncOperationDto, actorId: string): Promise<unknown> {
+  private async dispatch(op: SyncOperationDto, actor: JwtPayload): Promise<unknown> {
     const path = op.endpoint.replace(/^\/api\/v\d+/, ''); // normalize
 
     // ── Reservation ──────────────────────────────────────────────────────────
     if (path.startsWith('/reservations')) {
       if (op.method === 'POST') {
         const p = op.payload as {
-          bloodBankId: string; hospitalId: string; bloodTypeId: string;
-          quantity: number; urgency: string; clientId?: string;
+          bloodBankId: string; bloodTypeId: string;
+          aboGroup: 'A' | 'B' | 'AB' | 'O'; rhFactor: 'POSITIVE' | 'NEGATIVE';
+          quantity: number; urgency: 'ROUTINE' | 'URGENT' | 'EMERGENCY';
+          prescriptionId?: string; notes?: string;
+          hospitalId?: string; // only honoured for ADMIN — same rule as the online endpoint
         };
-        return this.prisma.reservation.create({
-          data: {
-            code:        `RES-${Date.now()}`,
-            bloodBank:   { connect: { id: p.bloodBankId } },
-            hospital:    { connect: { id: p.hospitalId } },
-            bloodType:   { connect: { id: p.bloodTypeId } },
-            requester:   { connect: { id: actorId } },
-            quantity:    p.quantity,
-            urgency:     p.urgency as 'ROUTINE' | 'EMERGENCY',
-            status:      'PENDING',
-          },
-        });
+        return this.reservationsService.create(
+          {
+            bloodBankId:    p.bloodBankId,
+            bloodTypeId:    p.bloodTypeId,
+            aboGroup:       p.aboGroup,
+            rhFactor:       p.rhFactor,
+            quantity:       p.quantity,
+            urgency:        p.urgency,
+            prescriptionId: p.prescriptionId,
+            notes:          p.notes,
+            ...(p.hospitalId && { hospitalId: p.hospitalId }),
+          } as any,
+          actor,
+        );
       }
     }
 
@@ -113,26 +129,43 @@ export class SyncService {
       const idMatch = path.match(/\/blood-bags\/([a-f0-9-]+)/);
       if (op.method === 'POST') {
         const p = op.payload as {
-          aboGroup: string; rhFactor: string; volumeMl: number;
-          expiresAt: string; bloodBankId: string; bloodTypeId: string;
+          code?: string;
+          aboGroup: 'A' | 'B' | 'AB' | 'O'; rhFactor: 'POSITIVE' | 'NEGATIVE';
+          volumeMl: number; collectedAt?: string; expiresAt: string;
+          bloodBankId?: string; bloodTypeId: string;
+          donorId?: string; screeningId?: string;
         };
-        return this.prisma.bloodBag.create({
-          data: {
-            code:        `BAG-${Date.now()}`,
-            bloodBank:   { connect: { id: p.bloodBankId } },
-            bloodType:   { connect: { id: p.bloodTypeId } },
+        return this.bloodBagsService.create(
+          {
+            code:        p.code ?? `BAG-${Date.now()}`,
+            aboGroup:    p.aboGroup,
+            rhFactor:    p.rhFactor,
+            bloodTypeId: p.bloodTypeId,
+            bloodBankId: p.bloodBankId,
+            donorId:     p.donorId,
+            screeningId: p.screeningId,
             volumeMl:    p.volumeMl,
-            expiresAt:   new Date(p.expiresAt),
-            collectedAt: new Date(),
-          },
-        });
+            collectedAt: p.collectedAt ?? new Date().toISOString(),
+            expiresAt:   p.expiresAt,
+          } as any,
+          actor,
+        );
       }
       if ((op.method === 'PATCH' || op.method === 'PUT') && idMatch) {
-        const p = op.payload as { status?: string; volumeMl?: number };
-        return this.prisma.bloodBag.update({
-          where: { id: idMatch[1] },
-          data:  p as Record<string, unknown>,
-        });
+        // The online API only exposes a discard mutation for existing bags —
+        // no generic status/field PATCH. Mirror that: offline can only discard.
+        const p = op.payload as { status?: string; reason?: string };
+        if (p.status === 'DISCARDED') {
+          return this.bloodBagsService.discard(
+            idMatch[1],
+            { reason: p.reason ?? 'Discarded via offline sync' },
+            actor,
+          );
+        }
+        throw Object.assign(
+          new Error(`Unsupported offline blood-bag update (status=${p.status})`),
+          { status: 400 },
+        );
       }
     }
 
@@ -142,25 +175,28 @@ export class SyncService {
       if (op.method === 'POST') {
         const p = op.payload as {
           firstName: string; lastName: string; bloodTypeId?: string;
-          nationalId?: string; medicalRecordNo?: string; hospitalId: string;
+          nationalId?: string; medicalRecordNo?: string; dob?: string;
+          hospitalId?: string; // only honoured for ADMIN — same rule as the online endpoint
         };
-        return this.prisma.patient.create({
-          data: {
-            firstName:      p.firstName,
-            lastName:       p.lastName,
-            hospital:       { connect: { id: p.hospitalId } },
-            ...(p.bloodTypeId    && { bloodType:      { connect: { id: p.bloodTypeId } } }),
-            ...(p.nationalId     && { nationalId:     p.nationalId }),
-            ...(p.medicalRecordNo && { medicalRecordNo: p.medicalRecordNo }),
+        return this.patientsService.create(
+          {
+            firstName:       p.firstName,
+            lastName:        p.lastName,
+            bloodTypeId:     p.bloodTypeId,
+            nationalId:      p.nationalId,
+            medicalRecordNo: p.medicalRecordNo,
+            dob:             p.dob,
+            ...(p.hospitalId && { hospitalId: p.hospitalId }),
           },
-        });
+          actor,
+        );
       }
       if ((op.method === 'PATCH' || op.method === 'PUT') && idMatch) {
-        const p = op.payload as { status?: string; diagnosis?: string; physician?: string };
-        return this.prisma.patient.update({
-          where: { id: idMatch[1] },
-          data:  p as Record<string, unknown>,
-        });
+        const p = op.payload as {
+          firstName?: string; lastName?: string; bloodTypeId?: string;
+          nationalId?: string; medicalRecordNo?: string; dob?: string;
+        };
+        return this.patientsService.update(idMatch[1], p, actor);
       }
     }
 
@@ -177,6 +213,7 @@ export class SyncService {
     since: Date | null,
     scopes: string[],
     facilityId: string,
+    userId: string,
   ): Promise<PullResponse> {
     const where = since ? { updatedAt: { gt: since } } : {};
 
@@ -198,7 +235,7 @@ export class SyncService {
 
       scopes.includes('notifications')
         ? this.prisma.notification.findMany({
-            where: { userId: facilityId, ...(since ? { createdAt: { gt: since } } : {}) },
+            where: { userId, ...(since ? { createdAt: { gt: since } } : {}) },
             take: 100,
             orderBy: { createdAt: 'desc' },
           })

@@ -6,12 +6,37 @@ import { PrismaService } from '../../../prisma/prisma.service';
 export class PatientsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(hospitalId?: string) {
-    return this.prisma.patient.findMany({
-      where:   hospitalId ? { hospitalId } : undefined,
-      include: { bloodType: { select: { label: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    hospitalId: string | undefined,
+    page: number,
+    limit: number,
+    search?: string,
+    isActive?: boolean,
+  ) {
+    const where: Prisma.PatientWhereInput = {
+      ...(hospitalId && { hospitalId }),
+      ...(isActive !== undefined && { isActive }),
+      ...(search && {
+        OR: [
+          { firstName:       { contains: search, mode: 'insensitive' } },
+          { lastName:        { contains: search, mode: 'insensitive' } },
+          { nationalId:      { contains: search, mode: 'insensitive' } },
+          { medicalRecordNo: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.patient.findMany({
+        where,
+        include: { bloodType: { select: { label: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.patient.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {

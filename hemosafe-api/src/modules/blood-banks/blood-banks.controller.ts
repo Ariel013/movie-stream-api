@@ -11,6 +11,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { AuditEntity } from '../../common/decorators/audit.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('blood-banks')
 @ApiBearerAuth()
@@ -22,8 +23,11 @@ export class BloodBanksController {
   @Get()
   @ApiOperation({ summary: 'List blood banks, optionally filtered by region' })
   @ApiQuery({ name: 'regionId', required: false, type: String })
-  findAll(@Query('regionId') regionId?: string) {
-    return this.service.findAll(regionId);
+  findAll(
+    @Query('regionId') regionId: string | undefined,
+    @Query() { page = 1, limit = 10 }: PaginationQueryDto,
+  ) {
+    return this.service.findAll(regionId, page, limit);
   }
 
   @Get('nearby')

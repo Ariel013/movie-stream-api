@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete, Body,
-  Param, ParseUUIDPipe, UseGuards, HttpCode, HttpStatus,
+  Param, ParseUUIDPipe, UseGuards, HttpCode, HttpStatus, Query,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
@@ -12,6 +12,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { AuditEntity } from '../../common/decorators/audit.decorator';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('transfers')
 @ApiBearerAuth()
@@ -22,8 +23,8 @@ export class TransfersController {
 
   @Get()
   @ApiOperation({ summary: 'List transfers visible to the authenticated user' })
-  findAll(@CurrentUser() actor: JwtPayload) {
-    return this.service.findAll(actor);
+  findAll(@Query() { page = 1, limit = 10 }: PaginationQueryDto, @CurrentUser() actor: JwtPayload) {
+    return this.service.findAll(actor, page, limit);
   }
 
   @Get(':id')

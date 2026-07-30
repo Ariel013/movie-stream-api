@@ -1,10 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { AboGroup, BagStatus, RhFactor } from '@prisma/client';
 import {
-  IsEnum, IsInt, IsOptional, IsUUID, Max, Min,
+  IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min,
 } from 'class-validator';
 
 export class FilterBloodBagsDto {
+  @ApiPropertyOptional({ description: 'Partial, case-insensitive match on the bag code' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
   @ApiPropertyOptional({ enum: AboGroup })
   @IsOptional()
   @IsEnum(AboGroup)

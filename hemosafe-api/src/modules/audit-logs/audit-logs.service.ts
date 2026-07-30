@@ -5,7 +5,11 @@ import { AuditLogsRepository } from './audit-logs.repository';
 export class AuditLogsService {
   constructor(private readonly repo: AuditLogsRepository) {}
 
-  findAll(limit = 100, skip = 0) {
-    return this.repo.findAll(limit, skip);
+  findAll(page: number, limit: number, entity?: string, search?: string) {
+    return this.repo.findAll(page, limit, entity, search);
+  }
+
+  distinctEntities() {
+    return this.repo.distinctEntities();
   }
 }

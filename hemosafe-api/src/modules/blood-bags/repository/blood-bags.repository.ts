@@ -22,7 +22,11 @@ export class BloodBagsRepository {
       this.prisma.bloodBag.findMany({
         where,
         include: BAG_INCLUDE,
-        orderBy: { expiresAt: 'asc' },   // FEFO order
+        // FEFO order, `id` as a stable tiebreaker — without it, rows sharing the
+        // same expiresAt have no guaranteed order across separate paginated
+        // queries and can shift between pages (skip/take silently drops or
+        // duplicates rows).
+        orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
         skip,
         take: limit,
       }),

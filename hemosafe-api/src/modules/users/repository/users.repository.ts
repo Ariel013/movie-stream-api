@@ -12,8 +12,19 @@ const SAFE_SELECT = {
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(where?: Prisma.UserWhereInput) {
-    return this.prisma.user.findMany({ where, select: SAFE_SELECT });
+  async findAll(where: Prisma.UserWhereInput | undefined, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: SAFE_SELECT,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return { data, total, page, limit };
   }
 
   findById(id: string) {
@@ -35,10 +46,10 @@ export class UsersRepository {
     return this.prisma.user.update({ where: { id }, data, select: SAFE_SELECT });
   }
 
-  deactivate(id: string) {
+  setActive(id: string, isActive: boolean) {
     return this.prisma.user.update({
       where: { id },
-      data:  { isActive: false },
+      data:  { isActive },
       select: SAFE_SELECT,
     });
   }

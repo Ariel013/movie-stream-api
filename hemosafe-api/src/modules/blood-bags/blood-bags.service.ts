@@ -7,6 +7,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UserRole, BagStatus } from '@prisma/client';
 import { BloodBagsRepository } from './repository/blood-bags.repository';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CacheService } from '../../common/cache/cache.service';
 import type { CreateBloodBagDto } from './dto/create-blood-bag.dto';
 import type { FilterBloodBagsDto } from './dto/filter-blood-bags.dto';
 import type { DiscardBloodBagDto } from './dto/discard-blood-bag.dto';
@@ -16,10 +17,13 @@ import type { JwtPayload } from '../../common/decorators/current-user.decorator'
 export class BloodBagsService {
   private readonly logger = new Logger(BloodBagsService.name);
 
+  private static readonly STOCK_SUMMARY_TTL_SECONDS = 180; // 3 min — dashboard read, not transactional
+
   constructor(
     private readonly repo: BloodBagsRepository,
     private readonly prisma: PrismaService,
     private readonly events: EventEmitter2,
+    private readonly cache: CacheService,
   ) {}
 
   // ── Reference data ─────────────────────────────────────────────────────────
@@ -34,11 +38,13 @@ export class BloodBagsService {
   // ── Queries ────────────────────────────────────────────────────────────────
 
   findAll(dto: FilterBloodBagsDto, actor: JwtPayload) {
+    this.assertNotHospital(actor);
     const where = this.buildWhere(dto, actor);
     return this.repo.findAll(where, dto.page ?? 1, dto.limit ?? 20);
   }
 
   async findOne(id: string, actor: JwtPayload) {
+    this.assertNotHospital(actor);
     const bag = await this.repo.findById(id);
     if (!bag) throw new NotFoundException(`Blood bag ${id} not found`);
     this.assertBankAccess(actor, bag.bloodBankId);
@@ -46,13 +52,19 @@ export class BloodBagsService {
   }
 
   stockSummary(bloodBankId: string, actor: JwtPayload) {
+    this.assertNotHospital(actor);
     if (actor.role === UserRole.BLOOD_BANK && actor.facilityId !== bloodBankId) {
       throw new ForbiddenException('Access denied to another blood bank');
     }
-    return this.repo.stockSummary(bloodBankId);
+    return this.cache.getOrSet(
+      `stock-summary:${bloodBankId}`,
+      BloodBagsService.STOCK_SUMMARY_TTL_SECONDS,
+      () => this.repo.stockSummary(bloodBankId),
+    );
   }
 
   expiringSoon(actor: JwtPayload) {
+    this.assertNotHospital(actor);
     const bankId = actor.role === UserRole.BLOOD_BANK ? actor.facilityId ?? undefined : undefined;
     return this.repo.expiringSoon(bankId);
   }
@@ -76,7 +88,22 @@ export class BloodBagsService {
       throw new BadRequestException('expiresAt must be after collectedAt');
     }
 
-    // aboGroup / rhFactor live on the BloodType model, not BloodBag — connect via bloodTypeId
+    // aboGroup / rhFactor live on the BloodType model, not BloodBag — connect via
+    // bloodTypeId, but cross-check the submitted labels against it so a caller
+    // can't register a bag under the wrong blood type by sending a mismatched pair.
+    const bloodType = await this.prisma.bloodType.findUnique({
+      where: { id: dto.bloodTypeId },
+      select: { aboGroup: true, rhFactor: true },
+    });
+    if (!bloodType) {
+      throw new BadRequestException(`Blood type ${dto.bloodTypeId} not found`);
+    }
+    if (bloodType.aboGroup !== dto.aboGroup || bloodType.rhFactor !== dto.rhFactor) {
+      throw new BadRequestException(
+        `aboGroup/rhFactor (${dto.aboGroup}${dto.rhFactor}) does not match bloodTypeId`,
+      );
+    }
+
     const bag = await this.repo.create({
       code:       dto.code,
       volumeMl:   dto.volumeMl,
@@ -160,9 +187,15 @@ export class BloodBagsService {
 
   private buildWhere(dto: FilterBloodBagsDto, actor: JwtPayload) {
     const where: Record<string, unknown> = {};
-    if (dto.aboGroup)    where['aboGroup']    = dto.aboGroup;
-    if (dto.rhFactor)    where['rhFactor']    = dto.rhFactor;
+    // aboGroup / rhFactor live on BloodType, not BloodBag — filter via the relation
+    if (dto.aboGroup || dto.rhFactor) {
+      where['bloodType'] = {
+        ...(dto.aboGroup && { aboGroup: dto.aboGroup }),
+        ...(dto.rhFactor && { rhFactor: dto.rhFactor }),
+      };
+    }
     if (dto.status)      where['status']      = dto.status;
+    if (dto.code)        where['code']        = { contains: dto.code, mode: 'insensitive' };
 
     if (actor.role === UserRole.BLOOD_BANK) {
       where['bloodBankId'] = actor.facilityId;
@@ -170,6 +203,17 @@ export class BloodBagsService {
       where['bloodBankId'] = dto.bloodBankId;
     }
     return where;
+  }
+
+  /**
+   * Blood stock detail/inventory is confidential to the owning bank (+ ADMIN for
+   * national oversight). Hospitals only get availability counts, never raw stock,
+   * via the purpose-built GET /reservations/search endpoint.
+   */
+  private assertNotHospital(actor: JwtPayload) {
+    if (actor.role === UserRole.HOSPITAL) {
+      throw new ForbiddenException('Hospitals cannot access blood bag inventory directly');
+    }
   }
 
   private assertBankAccess(actor: JwtPayload, bloodBankId: string) {

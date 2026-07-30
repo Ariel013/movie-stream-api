@@ -3,6 +3,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import type { Redis } from 'ioredis';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
@@ -35,6 +37,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    @InjectRedis() private readonly redis: Redis,
   ) {}
 
   // ── Login ──────────────────────────────────────────────────────────────────
@@ -116,11 +119,29 @@ export class AuthService {
 
   // ── Logout ─────────────────────────────────────────────────────────────────
 
-  async logout(userId: string): Promise<void> {
+  /**
+   * Revokes the current session: clears the stored refresh token (blocks future
+   * refreshes) and blacklists the access token in Redis for its remaining
+   * lifetime (blocks it immediately, instead of leaving it valid — stateless JWTs
+   * would otherwise keep working until natural expiry, up to ACCESS_EXPIRES_SEC
+   * after "logout").
+   */
+  async logout(userId: string, accessToken?: string): Promise<void> {
     await this.prisma.user.update({
       where: { id: userId },
       data: { refreshToken: null },
     });
+
+    if (accessToken) {
+      const decoded = this.jwtService.decode(accessToken) as { exp?: number } | null;
+      const ttl = decoded?.exp
+        ? decoded.exp - Math.floor(Date.now() / 1000)
+        : this.ACCESS_EXPIRES_SEC;
+
+      if (ttl > 0) {
+        await this.redis.set(`blacklist:${accessToken}`, '1', 'EX', ttl);
+      }
+    }
   }
 
   // ── Me ─────────────────────────────────────────────────────────────────────

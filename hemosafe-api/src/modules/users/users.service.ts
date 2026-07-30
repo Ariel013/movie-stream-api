@@ -12,12 +12,12 @@ import type { JwtPayload } from '../../common/decorators/current-user.decorator'
 export class UsersService {
   constructor(private readonly repo: UsersRepository) {}
 
-  async findAll(actor: JwtPayload) {
+  async findAll(actor: JwtPayload, page: number, limit: number) {
     // HOSPITAL and BLOOD_BANK see only users of their own facility
     if (actor.role !== UserRole.ADMIN) {
-      return this.repo.findAll({ facilityId: actor.facilityId ?? undefined });
+      return this.repo.findAll({ facilityId: actor.facilityId ?? undefined }, page, limit);
     }
-    return this.repo.findAll();
+    return this.repo.findAll(undefined, page, limit);
   }
 
   async findOne(id: string, actor: JwtPayload) {
@@ -29,8 +29,15 @@ export class UsersService {
 
   async create(dto: CreateUserDto, actor: JwtPayload) {
     // Only ADMIN can create users of any role or for any facility
-    if (actor.role !== UserRole.ADMIN && dto.facilityId !== actor.facilityId) {
-      throw new ForbiddenException('Cannot create user for another facility');
+    if (actor.role !== UserRole.ADMIN) {
+      if (dto.facilityId !== actor.facilityId) {
+        throw new ForbiddenException('Cannot create user for another facility');
+      }
+      // Prevent privilege escalation: a non-ADMIN can only provision staff
+      // with their own role — never ADMIN, never a different facility's role.
+      if (dto.role !== actor.role) {
+        throw new ForbiddenException(`Cannot create a user with role ${dto.role}`);
+      }
     }
 
     const exists = await this.repo.findByEmail(dto.email);
@@ -52,13 +59,14 @@ export class UsersService {
     return this.repo.update(id, dto);
   }
 
-  async deactivate(id: string, actor: JwtPayload) {
+  /** Toggles the account: deactivates an active user, reactivates an inactive one. */
+  async toggleActive(id: string, actor: JwtPayload) {
     if (actor.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only ADMIN can deactivate users');
+      throw new ForbiddenException('Only ADMIN can activate/deactivate users');
     }
     const user = await this.repo.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
-    return this.repo.deactivate(id);
+    return this.repo.setActive(id, !user.isActive);
   }
 
   private assertFacilityAccess(actor: JwtPayload, targetFacilityId: string | null) {

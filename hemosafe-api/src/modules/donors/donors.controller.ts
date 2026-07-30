@@ -3,8 +3,10 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -13,6 +15,7 @@ import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.de
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { FilterDonorsDto } from './dto/filter-donors.dto';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { CreateScreeningDto } from './dto/create-screening.dto';
 import { DonorsService } from './donors.service';
@@ -25,12 +28,15 @@ export class DonorsController {
   constructor(private readonly donorsService: DonorsService) {}
 
   @Get()
-  findAll(@CurrentUser() actor: JwtPayload) {
-    return this.donorsService.findAll(actor);
+  findAll(
+    @Query() { page = 1, limit = 10, search, isEligible }: FilterDonorsDto,
+    @CurrentUser() actor: JwtPayload,
+  ) {
+    return this.donorsService.findAll(actor, page, limit, search, isEligible);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() actor: JwtPayload) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: JwtPayload) {
     return this.donorsService.findOne(id, actor);
   }
 
@@ -42,7 +48,7 @@ export class DonorsController {
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: Partial<CreateDonorDto>,
     @CurrentUser() actor: JwtPayload,
   ) {
